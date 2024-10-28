@@ -895,24 +895,6 @@ CoveragePlot(object = F3.Germ, features = c("Stra8"),
 ggsave("F3.stra8_coverageplot for web.tiff", dpi=300, width = 6, height = 6)
 ```
 
-```{r}
-library(eulerr)
-png(filename="Vennplot for KH grant.png", res = 100)
-
-VennDiag <- euler(c("A" = 4152, "B" = 1500, "C" = 600, "A&B" = 650,"A&C" = 200,"B&C" = 220, "A&B&C" = 150))
-
-plot(VennDiag, counts = TRUE, font=1, cex=2, alpha=1, 
-     fill=c("#FDE4E3","#89CFF0","lightgrey"), legend=list(side="bottom"), edges = list(col = c("red","blue","black"), lex = 3), shape = "ellipse")
-```
 
 
-```{r}
-library(Seurat)
-table(F1.final.wnn@meta.data$replicate)
-table(F2.final.wnn@meta.data$renamed.cluster.id)
-table(F3.final.wnn@meta.data$renamed.cluster.id)
-```
-```{r}
-FeaturePlot(F1.Germ, "Wt1", reduction = "wnn.umap2Germ", split.by="treatment")
-```
 
