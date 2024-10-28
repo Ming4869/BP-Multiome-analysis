@@ -1,0 +1,918 @@
+
+
+```{r}
+##venn plots
+library(eulerr)
+```
+
+```{r}
+png(filename="Vennplot F1 up_DEGs.png", res = 100)
+
+VennDiag <- euler(c("BPA/CON" = 2454, "BPS/CON" = 944,  "BPA/CON&BPS/CON" = 4388),shape = "ellipse")
+plot(VennDiag, counts = TRUE, font=1, cex=1, alpha=0.5, 
+     fill=c("#E899AC","#6C9C9D"), legend=list(side="bottom") )
+
+#quantities = list(type = "percent")
+dev.off()
+```
+
+```{r}
+png(filename="Vennplot F1 down_DEGs.png", res = 100)
+
+VennDiag <- euler(c("BPA/CON" = 319, "BPS/CON" = 58,  "BPA/CON&BPS/CON" = 114),shape = "ellipse")
+plot(VennDiag, counts = TRUE, font=1, cex=1, alpha=0.7, 
+     fill=c("#BAABDA","#9FDFCD"), legend=list(side="bottom") )
+
+#quantities = list(type = "percent"
+```
+
+```{r}
+png(filename="Vennplot F1-F3 BPA up_DEGs.png", res = 100)
+
+VennDiag <- euler(c("A" = 3152, "B" = 671, "C" = 34, "A&B" = 3379,"A&C" = 30,"B&C" = 22, "A&B&C" = 281))
+plot(VennDiag, counts = TRUE, font=1, cex=1, alpha=0.7, 
+     fill=c("#FDE4E3","#F282B4","#EF415E"), legend=list(side="bottom") )
+```
+
+
+```{r}
+png(filename="Vennplot F1-F3 BPS up_DEGs.png", res = 100)
+
+VennDiag <- euler(c("A" = 3041, "B" = 875, "C" = 292, "A&B" = 1450,"A&C" = 317,"B&C" = 128, "A&B&C" = 524))
+plot(VennDiag, counts = TRUE, font=1, cex=1, alpha=0.7, 
+     fill=c("#D7EAF3","#7ED2DF","#0567A8"), legend=list(side="bottom") )
+```
+
+
+
+```{r}
+#up-DEGs Go Terms
+PsDEs <- read.csv("F1.BPA.up.csv")  
+FoldChangePsDEs <- PsDEs[,2]
+names(FoldChangePsDEs) <- as.character(PsDEs[,1])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+convertIDs <- function( ids, fromKey, toKey, db, ifMultiple=c( "putNA", "useFirst" ) ) {
+   stopifnot( inherits( db, "AnnotationDb" ) )
+   ifMultiple <- match.arg( ifMultiple )
+   suppressWarnings( selRes <- AnnotationDbi::select( 
+      db, keys=ids, keytype=fromKey, columns=c(fromKey,toKey) ) )
+   if( ifMultiple == "putNA" ) {
+      duplicatedIds <- selRes[ duplicated( selRes[,1] ), 1 ]   
+      selRes <- selRes[ ! selRes[,1] %in% duplicatedIds, ] }
+   return( selRes[ match( ids, selRes[,1] ), 2 ] )
+}
+
+idPsDEs <- names(FoldChangePsDEs)
+PsDEs$ENTREZID <- convertIDs(idPsDEs, "SYMBOL","ENTREZID", org.Mm.eg.db)
+head(PsDEs, 4)
+  
+  
+  
+AllDEs <- read.csv("All.csv")
+FoldChangeAllDEs <- AllDEs[,2] 
+names(FoldChangeAllDEs) <- as.character(AllDEs[,1])
+FoldChangeAllDEs <- sort(FoldChangeAllDEs, decreasing = TRUE)
+
+idAllDEs <- names(FoldChangeAllDEs)
+AllDEs$ENTREZID <- convertIDs(idAllDEs, "SYMBOL","ENTREZID", org.Mm.eg.db )
+head(AllDEs, 4)
+
+
+GOPsDEs.BPA <- enrichGO(PsDEs$ENTREZID,   
+                    universe      = AllDEs$ENTREZID,
+                    OrgDb         = 'org.Mm.eg.db',
+                    ont           = "BP",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.05,
+                    qvalueCutoff  = 0.05,
+                    readable      = TRUE)
+
+
+
+a <- c("ribonucleoprotein complex biogenesis","mRNA processing","DNA repair","regulation of translation","mitotic cell cycle phase transition","ATP metabolic process","oxidative phosphorylation","intrinsic apoptotic signaling pathway","meiotic cell cycle process","autophagy","methylation","ATP metabolic process","histone modification","aerobic respiration")
+
+p2 <- barplot(GOPsDEs.BPA, showCategory = a, font.size=12, x = "Count")+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color="black", size=11))+theme(legend.key.width = unit(0.2,"cm"))+theme(legend.key.height = unit(0.3,"cm"))+theme(legend.text = element_text(size = 8))+theme(legend.title = element_text(size = 8))+xlab("Gene Counts")+ggtitle("BPA vs CON")+theme(plot.title = element_text(size=10,face = "bold"))+theme(axis.title = element_text(size = 10))+theme(axis.text.x = element_text(angle = 30, size=8))+ theme(legend.position = c(0.85, 0.3))+scale_fill_gradientn(colors = c("#E899AC","#fde4e3")
+ )+theme(axis.line.x.bottom = element_line(color = 'black'),
+    axis.line.y.left   = element_blank(),
+    axis.line.y.right  = element_blank(),
+    axis.text.y.right  = element_blank(),
+    axis.ticks.y.right = element_blank(),
+    panel.border       = element_blank())+theme(panel.grid = element_blank())
+p2
+
+
+ggsave("Germ.BPA vs CON.GO.UP1.tiff", width=4.7, height=4.2, dpi=300, p2)
+```
+
+
+```{r}
+library(clusterProfiler)
+library(DOSE)
+library(ggplot2)
+library(enrichplot)
+library(org.Mm.eg.db)
+library(stringr)
+
+PsDEs <- read.csv("F1.BPS.up.csv")  
+FoldChangePsDEs <- PsDEs[,2]
+names(FoldChangePsDEs) <- as.character(PsDEs[,1])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+convertIDs <- function( ids, fromKey, toKey, db, ifMultiple=c( "putNA", "useFirst" ) ) {
+   stopifnot( inherits( db, "AnnotationDb" ) )
+   ifMultiple <- match.arg( ifMultiple )
+   suppressWarnings( selRes <- AnnotationDbi::select( 
+      db, keys=ids, keytype=fromKey, columns=c(fromKey,toKey) ) )
+   if( ifMultiple == "putNA" ) {
+      duplicatedIds <- selRes[ duplicated( selRes[,1] ), 1 ]   
+      selRes <- selRes[ ! selRes[,1] %in% duplicatedIds, ] }
+   return( selRes[ match( ids, selRes[,1] ), 2 ] )
+}
+
+idPsDEs <- names(FoldChangePsDEs)
+PsDEs$ENTREZID <- convertIDs(idPsDEs, "SYMBOL","ENTREZID", org.Mm.eg.db)
+head(PsDEs, 4)
+  
+  
+  
+AllDEs <- read.csv("All.csv")
+FoldChangeAllDEs <- AllDEs[,2] 
+names(FoldChangeAllDEs) <- as.character(AllDEs[,1])
+FoldChangeAllDEs <- sort(FoldChangeAllDEs, decreasing = TRUE)
+
+idAllDEs <- names(FoldChangeAllDEs)
+AllDEs$ENTREZID <- convertIDs(idAllDEs, "SYMBOL","ENTREZID", org.Mm.eg.db )
+head(AllDEs, 4)
+
+
+GOPsDEs.BP <- enrichGO(PsDEs$ENTREZID,   
+                    universe      = AllDEs$ENTREZID,
+                    OrgDb         = 'org.Mm.eg.db',
+                    ont           = "BP",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.05,
+                    qvalueCutoff  = 0.05,
+                    readable      = TRUE)
+
+
+a <- c("ribonucleoprotein complex biogenesis","mRNA processing","DNA repair","regulation of translation","mitotic cell cycle phase transition","ATP metabolic process","oxidative phosphorylation","intrinsic apoptotic signaling pathway","meiotic cell cycle process","autophagy","methylation","ATP metabolic process","histone modification","aerobic respiration")
+
+p1 <- barplot(GOPsDEs.BP, showCategory = a, font.size=12, x = "Count")+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color="black", size=11))+theme(legend.key.width = unit(0.2,"cm"))+theme(legend.key.height = unit(0.35,"cm"))+theme(legend.text = element_text(size = 8))+theme(legend.title = element_text(size = 8))+xlab("Gene Counts")+ggtitle("BPS vs CON")+theme(plot.title = element_text(size=10,face = "bold"))+theme(axis.title = element_text(size = 10))+theme(axis.text.x = element_text(angle = 30, size=8))+ theme(legend.position = c(0.85, 0.3))+scale_fill_gradientn(colors = c("#80bcbd","#7ed2df","#d7eaf3"))+theme(axis.line.x.bottom = element_line(color = 'black'),
+    axis.line.y.left   = element_blank(),
+    axis.line.y.right  = element_blank(),
+    axis.text.y.right  = element_blank(),
+    axis.ticks.y.right = element_blank(),
+    panel.border       = element_blank())+theme(panel.grid = element_blank())+scale_x_continuous(limits = c(0, 350))
+p1
+
+ggsave("Germ.BPS vs CON.GO.UP2.tiff", width=3.7, height=4.2, dpi=300, p1)
+
+
+
+```
+
+
+
+```{r}
+#down-DEGs GO terms together
+A <- read.csv("F1.BPA.down.csv")  
+FoldChangePsDEs <- A[,2]
+names(FoldChangePsDEs) <- as.character(A[,1])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+convertIDs <- function( ids, fromKey, toKey, db, ifMultiple=c( "putNA", "useFirst" ) ) {
+   stopifnot( inherits( db, "AnnotationDb" ) )
+   ifMultiple <- match.arg( ifMultiple )
+   suppressWarnings( selRes <- AnnotationDbi::select( 
+      db, keys=ids, keytype=fromKey, columns=c(fromKey,toKey) ) )
+   if( ifMultiple == "putNA" ) {
+      duplicatedIds <- selRes[ duplicated( selRes[,1] ), 1 ]   
+      selRes <- selRes[ ! selRes[,1] %in% duplicatedIds, ] }
+   return( selRes[ match( ids, selRes[,1] ), 2 ] )
+}
+
+
+idPsDEsA <- names(FoldChangePsDEs)
+A$ENTREZID <- convertIDs(idPsDEsA, "SYMBOL","ENTREZID", org.Mm.eg.db)
+
+
+
+
+S <- read.csv("F1.BPS.down.csv")  
+FoldChangePsDEs <- S[,2]
+names(FoldChangePsDEs) <- as.character(S[,1])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+convertIDs <- function( ids, fromKey, toKey, db, ifMultiple=c( "putNA", "useFirst" ) ) {
+   stopifnot( inherits( db, "AnnotationDb" ) )
+   ifMultiple <- match.arg( ifMultiple )
+   suppressWarnings( selRes <- AnnotationDbi::select( 
+      db, keys=ids, keytype=fromKey, columns=c(fromKey,toKey) ) )
+   if( ifMultiple == "putNA" ) {
+      duplicatedIds <- selRes[ duplicated( selRes[,1] ), 1 ]   
+      selRes <- selRes[ ! selRes[,1] %in% duplicatedIds, ] }
+   return( selRes[ match( ids, selRes[,1] ), 2 ] )
+}
+
+idPsDEsS <- names(FoldChangePsDEs)
+S$ENTREZID <- convertIDs(idPsDEsS, "SYMBOL","ENTREZID", org.Mm.eg.db)
+
+
+
+DATA <- list(BPA=A$ENTREZID, BPS=S$ENTREZID)
+
+str(DATA)
+down <- compareCluster(geneCluster = DATA, fun = enrichGO, ont = "BP",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.05,
+                    qvalueCutoff  = 0.05,
+                    universe= AllDEs$ENTREZID,
+                    OrgDb = 'org.Mm.eg.db',
+                    readable=TRUE)
+down.filter <-simplify(down, cutoff = 0.7, by = "p.adjust", select_fun = min)
+
+b <- c("response to acid chemical","response to wounding","response to mechanical stimulus","response to amino acid","transmembrane receptor protein serine/threonine kinase signaling pathway","cellular response to glucose stimulus","cellular response to hormone stimulus","cellular response to hexose stimulus","response to calcium ion","cellular response to transforming growth factor beta stimulus","transmembrane receptor protein serine/threonine kinase signaling pathway","macrophage activation","positive regulation of cytokine production")
+
+
+down.filter <- enrichplot::pairwise_termsim(down.filter) 
+
+nodeid.tbl_tree <- utils::getFromNamespace("nodeid.tbl_tree", "tidytree")
+rootnode.tbl_tree <- utils::getFromNamespace("rootnode.tbl_tree", "tidytree")
+offspring.tbl_tree <- utils::getFromNamespace("offspring.tbl_tree", "tidytree")
+offspring.tbl_tree_item <- utils::getFromNamespace(".offspring.tbl_tree_item", "tidytree")
+child.tbl_tree <- utils::getFromNamespace("child.tbl_tree", "tidytree")
+parent.tbl_tree <- utils::getFromNamespace("parent.tbl_tree", "tidytree")
+
+p3 <- treeplot(down.filter, showCategory = b, color = "p.adjust", nWords=0, hclust_method = "average", offset=5,label_format = 5, geneClusterPanel= "pie", cex_category=2, xlim=c(0,120), offset_tiplab=0.5, group_color=c("blue","#cc7a02","red","black"), pie="Count",hilight=T, nCluster=4, fontsize=7, legend_n=3, extend=0.5)+scale_fill_manual(values=c("#f282b4","#60e3d5"))+theme(legend.position =  c(.05,.85))
+p3
+ggsave("Go.down1.tiff", dpi = 300, width = 12, height = 7, p3)
+
+```
+```{r}
+p4 <- treeplot(down.filter, showCategory = b, color = "p.adjust", nWords=0, hclust_method = "average", offset=5,label_format = 5, geneClusterPanel= "pie", cex_category=2, xlim=c(0,120), offset_tiplab=1, group_color=c("#118ab2","#333333","#ef476f","#f77f00"), pie="Count",hilight=T, nCluster=4, fontsize=8, legend_n=3, extend=0.5)+scale_fill_manual(values=c("#BAABDA","#9FDFCD"))+theme(legend.position =  c(.05,.85))
+p4
+ggsave("Go.down.tiff", dpi = 300, width = 12, height = 3, p4)
+```
+```{r}
+#Down-DEGs heatmap 
+library(ggplot2)
+library(dplyr)
+
+#use combined BPA and BPS DEGs total 491
+#load the genes that I want to use
+df<-read.csv("F1.BP overlap.down.csv", header = T)
+df1<-df[,7]
+
+
+df4 <- AverageExpression(
+  F1.Germ,
+  assays = "RNA",
+  features = df1,
+  return.seurat = FALSE,
+  group.by = "treatment",
+  add.ident = NULL,
+  slot = "data",
+  verbose = TRUE
+)
+
+write.csv(df4, "heatmap_F1_down.csv")
+```
+
+
+```{r}
+#use complexheatmap for specific gene annotation, check https://jokergoo.github.io/ComplexHeatmap-reference
+library("RColorBrewer")
+library("gplots")
+set.seed(123)
+df<-read.csv("F1.BP overlap.down.csv", header = T)
+df1<-df[,9]
+df2 <-read.csv("heatmap_F1_down.csv")
+df2 <- as.matrix(df2[, -1])
+#scale row 
+scaled_mat = t(scale(t(df2)))
+
+#myCol <- colorRamp2(seq(from=-2,to=2,length=9),rev(brewer.pal(9, "PRGn")))
+myCol <- colorRamp2(seq(from=-2,to=2,length=9),brewer.pal(9, "BuPu"))
+
+#myCol <-plasma(3, alpha = 0.5, begin = 0, end = 1, direction = 1)
+ha = rowAnnotation(foo = anno_mark(at = c(118,131, 180, 192, 193, 198, 209, 249, 312,352, 362, 60,295,365,54 ), labels = df1))
+
+png(file="Heatmap of F1.down DEGs2.png", width=4,height=6,units="in",res=300)
+
+Heatmap(scaled_mat,col = myCol, right_annotation = ha, cluster_columns = FALSE, show_row_names = FALSE,row_names_side = "left", show_column_names = F,heatmap_legend_param = list(title = ""), 
+    column_names_side = "top")
+dev.off()
+```
+
+
+
+```{r}
+
+
+#Up-DEGs heatmap 
+library(ggplot2)
+library(dplyr)
+
+#use combined BPA and BPS DEGs total 7786
+#load the genes that I want to use
+df<-read.csv("F1.BP overlap.up.csv", header = T)
+df1<-df[,1]
+
+
+df4 <- AverageExpression(
+  F1.Germ,
+  assays = "RNA",
+  features = df1,
+  return.seurat = FALSE,
+  group.by = "treatment",
+  add.ident = NULL,
+  slot = "data",
+  verbose = TRUE
+)
+
+write.csv(df4, "heatmap_F1_up.csv")
+
+```
+
+
+```{r}
+
+library("RColorBrewer")
+library("gplots")
+set.seed(123)
+df <- read.csv("F1.BP overlap.up.csv", header = T)
+df2 <-read.csv("heatmap_F1_up.csv")
+df2 <- as.matrix(df2[, -1])
+df1<-df[,4]
+df3<-df[,5]
+
+#scale row 
+scaled_mat = t(scale(t(df2)))
+
+#myCol <- colorRamp2(seq(from=-2,to=2,length=9),brewer.pal(9, "Purples"))
+myCol <- colorRamp2(seq(from=-2,to=2,length=11),rev(brewer.pal(11, "RdBu")))
+
+#myCol <-plasma(3, alpha = 0.5, begin = 0, end = 1, direction = 1)
+ha = rowAnnotation(foo = anno_mark(at = df3, labels = df1))
+
+png(file="Heatmap of F1.up DEGs.png", width=4,height=8,units="in",res=300)
+
+Heatmap(scaled_mat,col = myCol, right_annotation = ha, cluster_columns = FALSE, show_row_names = FALSE,row_names_side = "left", show_column_names = F,heatmap_legend_param = list(title = ""), 
+    column_names_side = "top")
+dev.off()
+```
+
+
+
+
+```{r}
+#pseduotime 
+
+#read RDS "F1.germ.cds.rds" in "cds" folder
+
+F1.germ.cds <- estimate_size_factors(F1.germ.cds)
+F1.germ.cds@rowRanges@elementMetadata@listData[['gene_short_name']] <- rownames(F1.germ.cds[['RNA']])
+
+Genes.module <- c("Rora")
+
+rowData(F1.germ.cds)$gene_name <- rownames(F1.germ.cds)
+rowData(F1.germ.cds)$gene_short_name <- rowData(F1.germ.cds)$gene_name
+
+
+Genes.module_cds <- F1.germ.cds[rowData(F1.germ.cds)$gene_short_name %in% Genes.module,label_by_short_name = F]
+
+
+plot_genes_in_pseudotime(Genes.module_cds, color_cells_by ="pseudotime", cell_size = 0.1)+theme(axis.title = element_text(size=10))+theme(plot.title = element_text(size=16, face="bold"))+theme(axis.text = element_text(color='black', size=10))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+ theme(strip.text = element_text(size=8, face="bold.italic"))+NoLegend()&theme(plot.title = element_text(size=16, face="bold"))
+  #scale_color_manual(values =c("#F68282",'#31C53F','#1FA195','#B95FBB','#D4D915','#28CECA','#ff9a36','#2FF18B'))
+
+ggsave("Rora_pseduo.tiff", dpi=300, width = 2, height = 1.3)
+
+
+Genes.module <- c("Igf1r")
+
+rowData(F1.germ.cds)$gene_name <- rownames(F1.germ.cds)
+rowData(F1.germ.cds)$gene_short_name <- rowData(F1.germ.cds)$gene_name
+
+
+Genes.module_cds <- F1.germ.cds[rowData(F1.germ.cds)$gene_short_name %in% Genes.module,label_by_short_name = F]
+
+
+plot_genes_in_pseudotime(Genes.module_cds, color_cells_by ="pseudotime", cell_size = 0.1)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+ theme(strip.text = element_text(size=8, face="bold.italic"))+NoLegend()+theme(plot.title = element_text(size=8, face="bold"))
+  #scale_color_manual(values =c("#F68282",'#31C53F','#1FA195','#B95FBB','#D4D915','#28CECA','#ff9a36','#2FF18B'))
+
+ggsave("Igf1r_pseduo.tiff", dpi=300, width = 2, height = 1.3)
+
+
+Genes.module <- c("Hmgcr")
+
+rowData(F1.germ.cds)$gene_name <- rownames(F1.germ.cds)
+rowData(F1.germ.cds)$gene_short_name <- rowData(F1.germ.cds)$gene_name
+
+
+Genes.module_cds <- F1.germ.cds[rowData(F1.germ.cds)$gene_short_name %in% Genes.module,label_by_short_name = F]
+
+
+plot_genes_in_pseudotime(Genes.module_cds, color_cells_by ="pseudotime", cell_size = 0.1)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+ theme(strip.text = element_text(size=8, face="bold.italic"))+NoLegend()+theme(plot.title = element_text(size=8, face="bold"))
+  #scale_color_manual(values =c("#F68282",'#31C53F','#1FA195','#B95FBB','#D4D915','#28CECA','#ff9a36','#2FF18B'))
+
+ggsave("Hmgcr_pseduo.tiff", dpi=300, width = 2, height = 1.3)
+
+
+Genes.module <- c("S100a6")
+
+rowData(F1.germ.cds)$gene_name <- rownames(F1.germ.cds)
+rowData(F1.germ.cds)$gene_short_name <- rowData(F1.germ.cds)$gene_name
+
+
+Genes.module_cds <- F1.germ.cds[rowData(F1.germ.cds)$gene_short_name %in% Genes.module,label_by_short_name = F]
+
+
+plot_genes_in_pseudotime(Genes.module_cds, color_cells_by ="pseudotime", cell_size = 0.1)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+ theme(strip.text = element_text(size=8, face="bold.italic"))+NoLegend()+theme(plot.title = element_text(size=8, face="bold"))
+  #scale_color_manual(values =c("#F68282",'#31C53F','#1FA195','#B95FBB','#D4D915','#28CECA','#ff9a36','#2FF18B'))
+
+ggsave("S100a6_pseduo.tiff", dpi=300, width = 2, height = 1.3)
+```
+
+```{r}
+library(monocle)
+library(ComplexHeatmap)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(circlize)
+library(monocle3)
+
+modulated_genes <- graph_test(F1.germ.cds, neighbor_graph = "principal_graph", cores = 4)
+genes<- row.names(subset(modulated_genes, q_value < 0.05& morans_I > 0.1))
+genes
+
+df<-read.csv("BPA.S.up.SP1.SP4.csv", header = T)
+#F1.DMRT1.A.S.up.genes
+#F1.BPA.S.overlapped.SP1.KLF10 potential targets
+#BPA.S.up.SP1.SP4.csv
+Genes.module <- df[,1]
+
+#q_value == 0 & morans_I > 0.25
+pt.matrix <- exprs(F1.germ.cds)[match(Genes.module,rownames(rowData(F1.germ.cds))),order(pseudotime(F1.germ.cds))]
+#Can also use "normalized_counts" instead of "exprs" to use various normalization methods, for example:
+#normalized_counts(cds, norm_method = "log")
+
+pt.matrix <- t(apply(pt.matrix,1,function(x){smooth.spline(x,df=3)$y}))
+pt.matrix <- t(apply(pt.matrix,1,function(x){(x-mean(x))/sd(x)}))
+rownames(pt.matrix) <- Genes.module 
+
+png(file="F1.BPA.S.overlapped.SP1.SP4 potential targets_2153_up.png", width=4,height=4,units="in",res=600)
+#F1.BPA.S.overlapped.SP1.KLF10 potential targets_1654_up
+#F1.BPA.S.overlapped.DMRT1 potential targets_238_up
+
+df1 <- df[,3]
+df2 <- df[,4]
+ha = rowAnnotation(foo = anno_mark(at = df2, labels = df1))
+
+TF <- Heatmap(
+  pt.matrix,
+  name                         = "z-score",
+  col                          = colorRamp2(seq(from=-2,to=2,length=9),(brewer.pal(9, "YlOrBr"))),
+  show_row_names               = FALSE,
+  show_column_names            = FALSE,
+  row_names_gp                 = grid::gpar(fontsize = 3, fontfamily = "sans"),
+  row_title_rot                = 0,
+  cluster_rows                 = TRUE,
+  cluster_row_slices           = FALSE,
+  cluster_columns              = FALSE,
+  width = unit(5, "cm"),
+  use_raster = FALSE, right_annotation = ha
+  )
+
+
+draw(TF)
+ dev.off()
+```
+
+
+```{r}
+library(Seurat)
+library(ggplot2)
+
+Idents(F1.Germ)<-"treatment"
+DefaultAssay(F1.Germ)<-"RNA"
+VlnPlot(F1.Germ, c("Sp4"), pt.size=0.001, cols = c("#D4D4D4","#E899AC","#6C9C9D"))+NoLegend()+theme(axis.title.x = element_blank(), axis.title.y = element_text(size = 10))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 10)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))
+ggsave("Sp4_vln.tiff", dpi=300, width = 3, height = 2.5)
+
+VlnPlot(F1.Germ, c("Klf5"), pt.size=0.001, cols = c("#D4D4D4","#E899AC","#6C9C9D"))+NoLegend()+theme(axis.title.x = element_blank(), axis.title.y = element_text(size = 10))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 10)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))
+ggsave("Klf5_vln.tiff", dpi=300, width = 3, height = 2.5)
+
+VlnPlot(F1.Germ, c("Dmrt1"), pt.size=0.001, cols = c("#D4D4D4","#E899AC","#6C9C9D"))+NoLegend()+theme(axis.title.x = element_blank(), axis.title.y = element_text(size = 10))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 10)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))
+ggsave("Dmrt1_vln.tiff", dpi=300, width = 3, height = 2.5)
+```
+
+```{r}
+png(filename="Vennplot F1-F3 BPA down_DEGs.png", res = 100)
+
+VennDiag <- euler(c("A" = 222, "B" = 46, "C" = 2172, "A&B" = 20,"A&C" = 164,"B&C" = 36, "A&B&C" = 27))
+plot(VennDiag, counts = TRUE, font=1, cex=1, alpha=0.7, 
+     fill=c("#7b2cbf","#c77dff","#f2daff"), legend=list(side="bottom") )
+```
+
+
+```{r}
+png(filename="Vennplot F1-F3 BPS down_DEGs.png", res = 100)
+
+VennDiag <- euler(c("A" = 110, "B" = 107, "C" = 221, "A&B" = 15,"A&C" = 38,"B&C" = 32, "A&B&C" = 9))
+plot(VennDiag, counts = TRUE, font=1, cex=1, alpha=0.7, 
+     fill=c("#2d6a4f","#74c69d","#d8f3dc"), legend=list(side="bottom") )
+```
+
+
+```{r}
+# cell cycle phase comparsion
+
+Idents(F1.Germ)<-"treatment"
+RidgePlot(F1.Germ, features = c("Pcna",  "Mki67"), group.by = "treatment", ncol = 2) 
+FeaturePlot(F1.Germ, features = c("S.Score"), reduction ="wnn.umap2Germ", split.by="treatment",label.size = 30,min.cutoff = 0)
+FeaturePlot(F1.Germ, features = c("G2M.Score"), reduction ="wnn.umap2Germ", split.by="treatment",label.size = 30,min.cutoff = 0, max.cutoff =2)
+```
+```{r}
+library(Seurat)
+library(ggplot2)
+DefaultAssay(F1.Germ)<-"RNA"
+FeaturePlot(F1.Germ, c("Stra8"), reduction = "wnn.umap2Germ", min.cutoff = 0,
+  max.cutoff = 2.5, keep.scale = "all")+theme(legend.title = element_text(size=8)+theme(legend.key.size =unit(0.3,"cm"))+theme(legend.text = element_text(size = 8)))+NoAxes()+theme(legend.key.size =unit(0.2,"cm"))+theme(legend.text = element_text(size = 8))
+ggsave("Stra8_feature.tiff", dpi=300, width = 3, height = 2.5)
+
+FeaturePlot(F1.Germ, c("Id4"), reduction = "wnn.umap2Germ", min.cutoff = 0,
+  max.cutoff = 1.5, keep.scale = "all")+theme(legend.title = element_text(size=8)+theme(legend.key.size =unit(0.3,"cm"))+theme(legend.text = element_text(size = 8)))+NoAxes()+theme(legend.key.size =unit(0.2,"cm"))+theme(legend.text = element_text(size = 8))
+ggsave("Id4_feature.tiff", dpi=300, width = 3, height = 2.5)
+
+
+FeaturePlot(F1.Germ, c("Id4"), reduction = "wnn.umap2Germ", min.cutoff = 0, split.by = "treatment",
+  max.cutoff = 1.5, keep.scale = "all")&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&NoAxes()+theme(legend.position = c(0.1,0.8))
+ggsave("Id4_feature_treatment.tiff", dpi=300, width = 8, height = 2.5)
+
+FeaturePlot(F1.Germ, c("Stra8"), reduction = "wnn.umap2Germ", min.cutoff = 0.5, split.by = "treatment",
+  max.cutoff = 2.5, keep.scale = "all")&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&NoAxes()+theme(legend.position = c(0.1,0.8))
+ggsave("Stra8_feature_treatment.tiff", dpi=300, width = 8, height = 2.5)
+
+FeaturePlot(F1.Germ, c("Dmc1"), reduction = "wnn.umap2Germ", min.cutoff = 0.5, split.by = "treatment",
+  max.cutoff = 2.5, keep.scale = "all")&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&NoAxes()+theme(legend.position = c(0.1,0.8))
+ggsave("Dmc1_feature_treatment.tiff", dpi=300, width = 8, height = 2.5)
+```
+
+
+```{r}
+library(monocle)
+library(ComplexHeatmap)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(circlize)
+library(monocle3)
+
+modulated_genes <- graph_test(F1.germ.cds, neighbor_graph = "principal_graph", cores = 4)
+genes<- row.names(subset(modulated_genes, q_value < 0.05& morans_I > 0.1))
+genes
+
+df<-read.csv("BPA.S.up.SP4 KLF5 merge.csv", header = T)
+#F1.DMRT1.A.S.up.genes
+#F1.BPA.S.overlapped.SP1.KLF10 potential targets
+Genes.module <- df[,2]
+
+#q_value == 0 & morans_I > 0.25
+pt.matrix <- exprs(F1.germ.cds)[match(Genes.module,rownames(rowData(F1.germ.cds))),order(pseudotime(F1.germ.cds))]
+#Can also use "normalized_counts" instead of "exprs" to use various normalization methods, for example:
+#normalized_counts(cds, norm_method = "log")
+
+pt.matrix <- t(apply(pt.matrix,1,function(x){smooth.spline(x,df=3)$y}))
+pt.matrix <- t(apply(pt.matrix,1,function(x){(x-mean(x))/sd(x)}))
+rownames(pt.matrix) <- Genes.module 
+
+png(file="F1.BPA.S.overlapped.SP4.KLF5 potential targets_2122_up.png", width=4,height=4,units="in",res=600)
+#F1.BPA.S.overlapped.SP1.KLF10 potential targets_1654_up
+#F1.BPA.S.overlapped.DMRT1 potential targets_238_up
+df1 <- df[,6]
+df2 <- df[,7]
+ha = rowAnnotation(foo = anno_mark(at = df2, labels = df1))
+
+TF <- Heatmap(
+  pt.matrix,
+  name                         = "z-score",
+  col                          = colorRamp2(seq(from=-2,to=2,length=7),(brewer.pal(7, "OrRd"))),
+  show_row_names               = FALSE,
+  show_column_names            = FALSE,
+  row_names_gp                 = grid::gpar(fontsize = 3, fontfamily = "sans"),
+  row_title_rot                = 0,
+  cluster_rows                 = TRUE,
+  cluster_row_slices           = FALSE,
+  cluster_columns              = FALSE,
+  width = unit(5, "cm"),
+  use_raster = FALSE, right_annotation = ha
+  )
+
+
+draw(TF)
+ dev.off()
+
+
+```
+
+
+```{r}
+library(viridis)
+#pseudotime heatmap 
+genes<- row.names(subset(modulated_genes,q_value <0.05))
+genes
+
+df<-read.csv("Go pseudo heatmap genes.csv", header = T)
+
+Genes.module <- df[,2]
+
+#q_value == 0 & morans_I > 0.25
+pt.matrix <- exprs(F1.germ.cds)[match(Genes.module,rownames(rowData(F1.germ.cds))),order(pseudotime(F1.germ.cds))]
+#Can also use "normalized_counts" instead of "exprs" to use various normalization methods, for example:
+#normalized_counts(cds, norm_method = "log")
+
+pt.matrix <- t(apply(pt.matrix,1,function(x){smooth.spline(x,df=3)$y}))
+pt.matrix <- t(apply(pt.matrix,1,function(x){(x-mean(x))/sd(x)}))
+rownames(pt.matrix) <- Genes.module 
+
+png(file="F1.BPA.S.pseudoheatmap of GO Mitosis.png", width=4,height=1,units="in",res=600)
+#F1.BPA.S.overlapped.SP1.KLF10 potential targets_1654_up
+#F1.BPA.S.overlapped.DMRT1 potential targets_238_up
+
+#colorRamp2(seq(from=-2,to=2,length=5), plasma(20))seq(from=-2,to=2,length=11),rev(brewer.pal(11, "Spectral"))
+
+TF <- Heatmap(
+  pt.matrix,
+  name                         = "z-score",
+  col                          = colorRamp2(seq(from=-2,to=2,length=5),rev(brewer.pal(5, "RdYlBu"))),
+  show_row_names               = FALSE,
+  show_column_names            = FALSE,
+  row_names_gp                 = grid::gpar(fontsize = 3, fontfamily = "sans"),
+  row_title_rot                = 0,
+  cluster_rows                 = TRUE,
+  cluster_row_slices           = FALSE,
+  cluster_columns              = FALSE,
+  width = unit(5, "cm"),
+  use_raster = FALSE
+  )
+
+
+
+draw(TF)
+ dev.off()
+```
+
+
+
+
+```{r}
+library(eulerr)
+#F1 ATAC BPA/CON vs BPS/CON
+png(filename="Vennplot F1 ATAC up_DARs.png", res = 100)
+
+VennDiag <- euler(c("A" = 3155, "S" = 1357,  "A&S" = 1574))
+plot(VennDiag, counts = TRUE, font=1, cex=2, alpha=1, 
+     fill=c("#f0b5b5","#8db2c6"), legend=list(side="bottom") )
+dev.off()
+```
+
+
+
+```{r}
+png(filename="Vennplot F1 ATAC BPA_DARs vs DEGs.png", res = 100)
+
+VennDiag <- euler(c("A" = 2357, "B" = 5251, "C" = 327, "A&B" = 1591,"A&C" = 106,"B&C" = 0, "A&B&C" = 0))
+plot(VennDiag, counts = TRUE, font=1, cex=2, alpha=1, 
+     fill=c("#f0b5b5","#dad7d2","#b5aea5"), legend=list(side="bottom") )
+```
+
+```{r}
+png(filename="Vennplot F1 ATAC BPS_DARs vs DEGs.png", res = 100)
+
+VennDiag <- euler(c("A" = 1688, "B" = 4446, "C" = 144, "A&B" = 886,"A&C" = 28,"B&C" = 0, "A&B&C" = 0))
+plot(VennDiag, counts = TRUE, font=1, cex=1, alpha=1, 
+     fill=c("#8db2c6","#dad7d2","#b5aea5"), legend=list(side="bottom") )
+```
+
+
+```{r}
+plot_cells(cds = F2.germ.cds, label_cell_groups = FALSE, color_cells_by = "ident", show_trajectory_graph = TRUE, label_branch_points = FALSE, label_leaves = FALSE, label_roots = T,graph_label_size = 5, cell_size = 0.4)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=10)+theme(legend.text = element_text(size = 10)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 10))+theme(legend.text = element_text(size = 10))+scale_color_manual(values =c('#ff9a36','#31C53F','#1FA195','#28CECA',"#F68282",'#B95FBB','#D4D915'))+NoAxes()
+
+ggsave("F2.Germseudo.tiff", dpi=300, width = 5, height = 3)
+```
+
+```{r}
+plot_cells(cds = F3.germ.cds, label_cell_groups = FALSE, color_cells_by = "ident", show_trajectory_graph = TRUE, label_branch_points = FALSE, label_leaves = FALSE, label_roots = T,graph_label_size = 5, cell_size = 0.4)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=10)+theme(legend.text = element_text(size = 10)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 10))+theme(legend.text = element_text(size = 10))+scale_color_manual(values =c('#ff9a36','#31C53F','#1FA195','#28CECA',"#F68282",'#B95FBB','#D4D915','#2FF18B'))+NoAxes()
+
+ggsave("F3.Germseudo.tiff", dpi=300, width = 5, height = 3)
+```
+
+```{r}
+library(Seurat)
+library(Signac)
+library(scCustomize)
+library(scales)
+Idents(F1.Germ)<-"state1"
+levels(F1.Germ)
+DimPlot(F1.Germ, reduction = "wnn.umap2Germ") 
+
+
+DefaultAssay(F1.Germ)<-"RNA"
+df<-read.csv("F1.A.S.core TF1.csv")
+df<-df[,1]
+DotPlot_scCustom(F1.Germ, features = df,x_lab_rotate = T, flip_axes = T,dot.scale = 8 )+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text.y  = element_text(color='black', size=10))+theme(legend.key.size = unit(0.2, 'cm'))+theme(legend.title = element_text(size = 7))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 7))+theme(axis.text.x  = element_text(color='black', size=12))
+
+ggsave("F1.core TF gene expression in states1.tiff", dpi = 300, width =2.8, height = 4.6, bg="white")
+
+
+
+```
+```{r}
+Idents(F1.Germ)<-"Germ.cluster.ids"
+levels(F1.Germ)
+
+df<-read.csv("F1 core TF.csv")
+df<-df[,1]
+DotPlot_scCustom(F1.Germ, features = df,x_lab_rotate = TRUE, flip_axes = F)+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=8))+theme(legend.key.size = unit(0.2, 'cm'))+theme(legend.title = element_text(size = 6))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 6))
+
+```
+
+```{r}
+#TF activity
+Idents(F1.Germ)<-"state1"
+levels(F1.Germ)
+
+df<-read.csv("F1 core TF.csv", header = T)
+df1<-df[,2]
+df2<-df[,3]
+DefaultAssay(F1.Germ)<-"chromvar"
+DotPlot_scCustom(F1.Germ, features = df1,x_lab_rotate = TRUE, flip_axes = F)+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=8))+theme(legend.key.size = unit(0.2, 'cm'))+theme(legend.title = element_text(size = 6))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 6))+scale_x_discrete(labels=df2)
+```
+
+
+```{r}
+library(eulerr)
+png(filename="Vennplot F1 BPA core TF_NEW.png", res = 100)
+
+VennDiag <- euler(c("A" = 6813, "B" = 25,  "A&B" = 29))
+plot(VennDiag, counts = TRUE, font=1, cex=2, alpha=1, 
+     fill=c("#f7dcd5","white"), legend=list(side="bottom"),  edges = list(col = c("red","black"), lex = 3), shape = "ellipse") #edges=list(Ity=1:2)
+```
+
+
+
+```{r}
+library(eulerr)
+png(filename="Vennplot F1 BPS core TF.png", res = 100)
+
+VennDiag <- euler(c("A" = 5318, "B" = 23,  "A&B" = 14))
+plot(VennDiag, counts = TRUE, font=1, cex=1, alpha=1, 
+     fill=c("#b6cdd9","white"), legend=list(side="bottom"), edges = list(col = c("blue","black"), lex = 3), shape = "ellipse")
+```
+
+```{r}
+library(Seurat)
+library(Signac)
+library(scCustomize)
+library(ggplot2)
+DefaultAssay(F1.Germ)<-"chromvar"
+FeaturePlot(F1.Germ, c("MA1603.1"), reduction = "wnn.umap2Germ", min.cutoff = 0, split.by = "treatment",
+  max.cutoff = 1.5, keep.scale = "all")&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&NoAxes()+theme(legend.position = c(0.1,0.8))
+ggsave("Dmrt1 TF activity_treatment.tiff", dpi=300, width = 8, height = 2.5)
+
+FeaturePlot(F1.Germ, c("MA0685.1"), reduction = "wnn.umap2Germ", min.cutoff = 0.5, split.by = "treatment",
+  max.cutoff = 2.5, keep.scale = "all")&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&NoAxes()+theme(legend.position = c(0.1,0.8))
+ggsave("SP4 TF activity_treatment.tiff", dpi=300, width = 8, height = 2.5)
+
+FeaturePlot(F1.Germ, c("MA0079.4"), reduction = "wnn.umap2Germ", min.cutoff = 0.5, split.by = "treatment",
+  max.cutoff = 2, keep.scale = "all")&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&theme(legend.key.size =unit(0.3,"cm"))&theme(legend.text = element_text(size = 8))&NoAxes()+theme(legend.position = c(0.1,0.8))
+ggsave("SP1 TF activity_treatment.tiff", dpi=300, width = 8, height = 2.5)
+
+```
+```{r}
+library(Seurat)
+library(Signac)
+DefaultAssay(F1.Germ)<-"ATAC"
+MotifPlot(F1.Germ, motifs = c("SP4"))+theme(axis.text = element_text(color='black', size=10))+theme(title= element_text(size=8))+theme(axis.title = element_text(size=10))+NoAxes()
+ggsave("SP4 Motif.tiff", dpi=300, width = 1.2, height = 0.8, bg="white")
+
+MotifPlot(F1.Germ, motifs = c("Dmrt1"))+theme(axis.text = element_text(color='black', size=10))+theme(title= element_text(size=8))+theme(axis.title = element_text(size=10))+NoAxes()
+ggsave("Dmrt1 Motif.tiff", dpi=300, width = 1.2, height = 0.8, bg="white")
+
+MotifPlot(F1.Germ, motifs = c("KLF5"))+theme(axis.text = element_text(color='black', size=10))+theme(title= element_text(size=8))+theme(axis.title = element_text(size=10))+NoAxes()
+ggsave("KLF5 Motif.tiff", dpi=300, width = 1.2, height = 0.8, bg="white")
+```
+
+```{r}
+library(Seurat)
+library(ggplot2)
+VlnPlot(F1.Germ, c("Stra8"), pt.size=0.01, cols = c("#D4D4D4","#E899AC","#6C9C9D"))+NoLegend()+theme(axis.title.x = element_blank(), axis.title.y = element_text(size = 10))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 10)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))+theme(plot.title = element_text(size = 10))
+ggsave("F1.Stra8.tiff", dpi=300, width = 3, height = 2.5)
+Idents(F2.Germ)<-"Treatment"
+VlnPlot(F2.Germ, c("Stra8"), pt.size=0.01, cols=c("#D4D4D4","#E899AC","#6C9C9D"))+NoLegend()+theme(axis.title.x = element_blank(), axis.title.y = element_text(size = 10))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))+theme(plot.title = element_text(size = 10))+scale_x_discrete(labels=c("CON","BPA","BPS"))
+ggsave("F2.Stra8.tiff", dpi=300, width = 3, height = 2.5)
+Idents(F3.Germ)<-"Treatment"
+VlnPlot(F3.Germ, c("Stra8"), pt.size=0.01, cols = c("#D4D4D4","#E899AC","#6C9C9D"))+NoLegend()+theme(axis.title.x = element_blank(), axis.title.y = element_text(size = 10))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))+theme(plot.title = element_text(size = 10))+scale_x_discrete(labels=c("CON","BPA","BPS"))
+ggsave("F3.Stra8.tiff", dpi=300, width = 3, height = 2.5)
+```
+
+```{r}
+Idents(F2.Germ)<-"Germ.cluster.ids"
+levels(F2.Germ)
+DimPlot(F2.Germ, label = F, pt.size = 0.4, reduction= "wnn.umap2Germ")+theme(axis.title = element_text(size=10))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=10)+theme(legend.text = element_text(size = 10)))+theme(axis.line = element_line(arrow = arrow(type='closed', length = unit(10,'pt'))))+theme(axis.line.x = element_line(size=0.55))+ theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 10))+theme(legend.text = element_text(size = 10 ))+scale_color_manual(values =c('#ff9a36','#31C53F','#1FA195','#28CECA',"#F68282",'#B95FBB','#D4D915'))+scale_x_discrete("UMAP")+scale_y_discrete("UMAP")
+
+ggsave("F2.Germ_umap for web.tiff", dpi=300, width = 4.3, height = 2.5)
+```
+
+```{r}
+Idents(F3.Germ)<-"Germ.cluster.ids"
+levels(F3.Germ)
+DimPlot(F3.Germ, label = F, pt.size = 0.4, reduction= "wnn.umap2Germ")+theme(axis.title = element_text(size=10))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=10)+theme(legend.text = element_text(size = 10)))+theme(axis.line = element_line(arrow = arrow(type='closed', length = unit(10,'pt'))))+theme(axis.line.x = element_line(size=0.55))+ theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 10))+theme(legend.text = element_text(size = 10 ))+scale_color_manual(values =c('#ff9a36','#31C53F','#1FA195','#28CECA',"#F68282",'#B95FBB','#D4D915','#2FF18B'))+scale_x_discrete("UMAP")+scale_y_discrete("UMAP")
+
+ggsave("F3.Germ_umap for web.tiff", dpi=300, width = 4.3, height = 2.5)
+```
+
+```{r}
+Idents(F1.Germ)<-"Germ.cluster.ids"
+levels(F1.Germ)
+DimPlot(F1.Germ, label = F, pt.size = 0.2, reduction= "wnn.umap2Germ")+theme(axis.title = element_text(size=10))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=10)+theme(legend.text = element_text(size = 10)))+theme(axis.line = element_line(arrow = arrow(type='closed', length = unit(10,'pt'))))+theme(axis.line.x = element_line(size=0.55))+ theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 10))+theme(legend.text = element_text(size = 10 ))+scale_color_manual(values =c('#ff9a36',"#F68282",'#31C53F','#D4D915','#1FA195','#B95FBB','#28CECA','#2FF18B'))+scale_x_discrete("UMAP")+scale_y_discrete("UMAP")
+
+ggsave("F1.Germ_umap for web.tiff", dpi=300, width = 4.3, height = 2.5)
+```
+```{r}
+library(scCustomize)
+library(viridis)
+DefaultAssay(F1.Germ)<-"RNA"
+pal <- viridis(n = 10, option = "B")
+FeaturePlot(F1.Germ, "Stra8",reduction= "wnn.umap2Germ", pt.size = 0.3)+theme(legend.text = element_text(size = 10))+theme(legend.title = element_text(size = 12))+theme(legend.position =  "right")+NoAxes()+theme(legend.key.height = unit(1, "cm"))+theme(legend.text = element_text(size = 12))
+
+ggsave("F1.stra8_featureplot for web.tiff", dpi=300, width = 4, height = 2.8)
+
+FeaturePlot(F2.Germ, "Stra8",reduction= "wnn.umap2Germ", pt.size = 0.3)+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 10)))+theme(legend.title = element_text(size = 8))+theme(legend.position =  "right")+NoAxes()+theme(legend.key.height = unit(1, "cm"))
+
+ggsave("F2.stra8_featureplot for web.tiff", dpi=300, width = 3.8, height = 2.8)
+
+
+FeaturePlot(F3.Germ, "Stra8",reduction= "wnn.umap2Germ", pt.size = 0.3)+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 10)))+theme(legend.title = element_text(size = 8))+theme(legend.position =  "right")+NoAxes()+theme(legend.key.height = unit(1, "cm"))
+
+ggsave("F3.stra8_featureplot for web.tiff", dpi=300, width = 4.2, height = 2.8)
+```
+
+```{r}
+DefaultAssay(F1.Germ)<-"ATAC"
+Idents(F1.Germ)<-"Germ.cluster.ids"
+CoveragePlot(object = F1.Germ, features = c("Stra8"),
+    region = c("Stra8"),extend.upstream = 5000, extend.downstream = 5000,
+    peaks = T)&scale_fill_manual(values = c('#ff9a36',"#F68282",'#31C53F','#D4D915','#1FA195','#B95FBB','#28CECA','#2FF18B'))
+
+ggsave("F1.stra8_coverageplot for web.tiff", dpi=300, width = 6, height = 6)
+```
+```{r}
+Idents(F1.Germ)<-"treatment"
+CoveragePlot(object = F1.Germ,features = c("Stra8"),
+    region = c("Stra8"),extend.upstream = 5000, extend.downstream = 5000,
+    peaks = T)&scale_fill_manual(values = c("#D4D4D4","#E899AC","#6C9C9D"))
+```
+
+```{r}
+DefaultAssay(F2.Germ)<-"ATAC"
+Idents(F2.Germ)<-"Germ.cluster.ids"
+CoveragePlot(object = F2.Germ, features = c("Stra8"),
+    region = c("Stra8"),extend.upstream = 5000, extend.downstream = 5000,
+    peaks = T)&scale_fill_manual(values = c('#ff9a36','#31C53F','#1FA195','#28CECA',"#F68282",'#B95FBB','#D4D915'))
+
+ggsave("F2.stra8_coverageplot for web.tiff", dpi=300, width = 6, height = 6)
+```
+
+```{r}
+DefaultAssay(F3.Germ)<-"ATAC"
+Idents(F3.Germ)<-"Germ.cluster.ids"
+CoveragePlot(object = F3.Germ, features = c("Stra8"),
+    region = c("Stra8"),extend.upstream = 5000, extend.downstream = 5000,
+    peaks = T)&scale_fill_manual(values = c('#ff9a36','#31C53F','#1FA195','#28CECA',"#F68282",'#B95FBB','#D4D915','#2FF18B'))
+
+ggsave("F3.stra8_coverageplot for web.tiff", dpi=300, width = 6, height = 6)
+```
+
+```{r}
+library(eulerr)
+png(filename="Vennplot for KH grant.png", res = 100)
+
+VennDiag <- euler(c("A" = 4152, "B" = 1500, "C" = 600, "A&B" = 650,"A&C" = 200,"B&C" = 220, "A&B&C" = 150))
+
+plot(VennDiag, counts = TRUE, font=1, cex=2, alpha=1, 
+     fill=c("#FDE4E3","#89CFF0","lightgrey"), legend=list(side="bottom"), edges = list(col = c("red","blue","black"), lex = 3), shape = "ellipse")
+```
+
+
+```{r}
+library(Seurat)
+table(F1.final.wnn@meta.data$replicate)
+table(F2.final.wnn@meta.data$renamed.cluster.id)
+table(F3.final.wnn@meta.data$renamed.cluster.id)
+```
+```{r}
+FeaturePlot(F1.Germ, "Wt1", reduction = "wnn.umap2Germ", split.by="treatment")
+```
+
