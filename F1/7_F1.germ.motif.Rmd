@@ -1,0 +1,187 @@
+
+
+```{r}
+library(Seurat)
+library(Signac)
+library(EnsDb.Mmusculus.v79)    
+library(BSgenome.Mmusculus.UCSC.mm10)
+library(ggplot2)
+library(future)
+library(dplyr)
+library(hdf5r)
+```
+
+
+
+```{r}
+Germ <- readRDS("F1.Germ_2.rds")
+```
+
+
+```{r}
+library(motifmatchr)
+library(JASPAR2020)
+library(TFBSTools)
+library(BSgenome.Mmusculus.UCSC.mm10)
+
+DefaultAssay(F1.Germ)<-"ATAC"
+# extract position frequency matrices for the motifs
+pwm <- getMatrixSet(
+  x = JASPAR2020,
+  opts = list(collection = "CORE", tax_group = 'vertebrates',  all_versions = FALSE)
+)
+head(pwm)
+
+gr <- granges(Germ)
+seq_keep <- seqnames(gr) %in% seqnames(BSgenome.Mmusculus.UCSC.mm10) 
+seq_keep <- as.vector(seq_keep)
+feat.keep <- GRangesToString(grange = gr[seq_keep])
+Germ[['ATAC']] <- subset(Germ[["ATAC"]], features = feat.keep)
+
+# add motif information
+Germ <- AddMotifs(Germ, genome = BSgenome.Mmusculus.UCSC.mm10, pfm = pwm)
+
+head(rownames(Germ[["ATAC"]]))
+
+```
+
+
+
+
+```{r}
+#Find BPA/S enriched motifs
+BPA_peaks <- FindMarkers(
+  object = Germ,
+  ident.1 = 'BPA',
+  ident.2 = 'CON',
+  test.use = 'LR',
+  only.pos = TRUE,
+  min.pct = 0.05,
+  latent.vars = 'nFeature_ATAC'
+)
+
+write.csv(BPA_peaks, "BPA.CON.peaks.csv")
+
+```
+
+```{r}
+top.da.peak <- rownames(BPA_peaks[BPA_peaks$p_val < 0.005, ])
+
+enriched.motifs.A <- FindMotifs(
+  object = Germ,
+  features = top.da.peak
+)
+
+
+write.csv(enriched.motifs.A, "BPA.CON.enrichmotif.csv")
+```
+
+
+
+```{r}
+BPS_peaks <- FindMarkers(
+  object = Germ,
+  ident.1 = 'BPS',
+  ident.2 = 'CON',
+  test.use = 'LR',
+  only.pos = TRUE,
+  min.pct = 0.05,
+  latent.vars = 'nFeature_ATAC'
+)
+
+write.csv(BPS_peaks, "BPS.CON.peaks.csv")
+
+```
+
+```{r}
+top.da.peak <- rownames(BPS_peaks[BPS_peaks$p_val < 0.005, ])
+
+enriched.motifs.S <- FindMotifs(
+  object = Germ,
+  features = top.da.peak
+)
+
+
+write.csv(enriched.motifs.S, "BPS.CON.enrichmotif.csv")
+```
+
+```{r}
+MotifPlot(
+  object = Germ,
+  motifs = head(rownames(enriched.motifs.A))
+)
+```
+
+```{r}
+#Select core TF
+
+df1 <-read.csv("F1.BPA.GEX.up.csv")
+df2 <- read.csv("F1.BPS.GEX.up.csv")
+df3<- read.csv("F1 BPS vs con enriched TF motif.csv")
+df4<-read.csv("F1 BPA vs con enriched TF motif.csv")
+
+mergeA <- merge(df1, df4, by="gene_name")
+
+
+mergeS <- merge(df3, df2, by="gene_name")
+
+write.csv(mergeA, "F1 BPA core TF.csv")
+write.csv(mergeS, "F1 BPS core TF.csv")
+```
+
+```{r}
+#ChromVAR analysis
+Germ <- RunChromVAR(
+  object = Germ,
+  genome = BSgenome.Mmusculus.UCSC.mm10
+)
+
+DefaultAssay(F1.Germ) <- 'chromvar'
+
+levels(F1.Germ) 
+Idents(Germ)<-"treatment"
+```
+
+
+
+```{r}
+differential.activity <- FindMarkers(
+  object = Germ,
+  ident.1 = 'BPA',
+  ident.2 = 'CON',
+  only.pos = TRUE,
+  mean.fxn = rowMeans,
+  fc.name = "avg_diff"
+)
+
+write.csv(differential.activity,"BPA.CON.diff_Motif_activity.csv")
+
+differential.activity1 <- read.csv("BPA.CON.diff_Motif_activity.csv")
+enriched.motifs <- read.csv("BPA.CON.enrichmotif.csv")
+BPA.CON.DO <- merge(enriched.motifs, differential.activity1,  by="motif")
+write.csv(BPS.CON.DO, "BPA.CON.diff_Motif_activity.combined.csv")
+
+
+differential.activity <- FindMarkers(
+  object = Germ,
+  ident.1 = 'BPS',
+  ident.2 = 'CON',
+  only.pos = TRUE,
+  mean.fxn = rowMeans,
+  fc.name = "avg_diff"
+)
+
+write.csv(differential.activity,"BPS.CON.diff_Motif_activity.csv")
+
+differential.activity1 <- read.csv("BPS.CON.diff_Motif_activity.csv")
+enriched.motifs <- read.csv("BPS.CON.enrichmotif.csv")
+BPS.CON.DO <- merge(enriched.motifs, differential.activity1,  by="motif")
+write.csv(BPS.CON.DO, "BPS.CON.diff_Motif_activity.combined.csv")
+```
+
+
+```{r}
+saveRDS(Germ, "F1.Germ.rds")
+```
+
+

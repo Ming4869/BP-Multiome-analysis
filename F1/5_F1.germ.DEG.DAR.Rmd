@@ -1,0 +1,129 @@
+
+
+```{r}
+library(Seurat)
+library(Signac)
+library(ggplot2)
+library(future)
+library(dplyr)
+```
+
+
+```{r}
+Germ <- readRDS("F1.Germ_2.rds")
+```
+
+
+
+
+```{r}
+#DEG analysis
+Idents(Germ) <- "treatment"
+DefaultAssay(Germ) <- "RNA"
+
+BPA.CON.DEs <- FindMarkers(Germ, ident.1 = "BPA", ident.2 = "CON", test.use = "wilcox", min.pct = 0, logfc.threshold = 0)
+library(dplyr)
+BPA.CON.DEs <- BPA.CON.DEs %>%
+  mutate(FC = if_else(avg_log2FC>=0, 2^(BPA.CON.DEs$avg_log2FC), -2^(-(BPA.CON.DEs$avg_log2FC))))
+write.csv(BPA.CON.DEs, "BPA.CON.DEs.F1.Germ.Ming.csv")
+
+
+BPS.CON.DEs <- FindMarkers(Germ, ident.1 = "BPS", ident.2 = "CON", test.use = "wilcox", min.pct = 0, logfc.threshold = 0)
+BPS.CON.DEs <- BPS.CON.DEs %>% 
+  mutate(FC = if_else(avg_log2FC>=0, 2^(BPS.CON.DEs$avg_log2FC), -2^(-(BPS.CON.DEs$avg_log2FC))))
+write.csv(BPS.CON.DEs, "BPS.CON.DEs.F1.Germ.Ming.csv")
+
+
+BPA.BPS.DEs <- FindMarkers(Germ, ident.1 = "BPA", ident.2 = "BPS", test.use = "wilcox", min.pct = 0, logfc.threshold = 0)
+BPA.BPS.DEs <- BPA.BPS.DEs %>% 
+  mutate(FC = if_else(avg_log2FC>=0, 2^(BPA.BPS.DEs$avg_log2FC), -2^(-(BPA.BPS.DEs$avg_log2FC))))
+write.csv(BPA.BPS.DEs, "BPA.BPS.DEs.F1.Germ.Ming.csv")
+```
+
+
+```{r}
+# DAR analysis
+Idents(Germ) <- "treatment"
+DefaultAssay(Germ) <- "ATAC"
+
+
+BPA.CON.peaks <- FindMarkers(Germ, ident.1 = "BPA", ident.2 = "CON", min.pct = 0, logfc.threshold = 0, test.use = 'LR', latent.vars = 'nFeature_ATAC')
+BPS.CON.peaks <- FindMarkers(Germ, ident.1 = "BPS", ident.2 = "CON", min.pct = 0, logfc.threshold = 0,test.use = 'LR', latent.vars = 'nFeature_ATAC')
+BPA.BPS.peaks <- FindMarkers(Germ, ident.1 = "BPA", ident.2 = "BPS", min.pct = 0, logfc.threshold = 0,test.use = 'LR', latent.vars = 'nFeature_ATAC')
+write.csv(BPA.CON.peaks, "BPA.CON.peaks.csv")
+write.csv(BPS.CON.peaks, "BPS.CON.peaks.csv")
+write.csv(BPA.BPS.peaks, "BPA.BPS.peaks.csv")
+
+BPA.CON.peaks.name <- rownames(BPA.CON.peaks)
+closest_genes_BPA.CON.peaks.name <- ClosestFeature(F2.Germ, regions = BPA.CON.peaks.name)
+write.csv(closest_genes_BPA.CON.peaks.name, "closest_genes_BPA.CON.peaks.name.F1.csv")
+
+BPS.CON.peaks.name <- rownames(BPS.CON.peaks)
+closest_genes_BPS.CON.peaks.name <- ClosestFeature(F2.Germ, regions = BPS.CON.peaks.name)
+write.csv(closest_genes_BPS.CON.peaks.name, "closest_genes_BPS.CON.peaks.name.F1.csv")
+
+BPA.BPS.peaks.name <- rownames(BPA.BPS.peaks)
+closest_genes_BPA.BPS.peaks.name <- ClosestFeature(F2.Germ, regions = BPA.BPS.peaks.name)
+write.csv(closest_genes_BPA.BPS.peaks.name, "closest_genes_BPA.BPS.peaks.name.F1.csv")
+
+#merge to show all information of differential opening
+
+BPA.CON1 <- read.csv("BPA.CON.peaks.csv")
+BPA.CON2 <- read.csv("closest_genes_BPA.CON.peaks.name.F1.csv")
+BPA.CON.DO <- merge(BPA.CON1, BPA.CON2, by="query_region")
+write.csv(BPA.CON.DO, "BPA.CON.DO.combined.F1.Final.csv")
+
+
+BPS.CON1 <- read.csv("BPS.CON.peaks.csv")
+BPS.CON2 <- read.csv("closest_genes_BPS.CON.peaks.name.F1.csv")
+BPS.CON.DO <- merge(BPS.CON1, BPS.CON2, by="query_region")
+write.csv(BPS.CON.DO, "BPS.CON.DO.combined.F1.Final.csv")
+
+
+BPA.BPS1 <- read.csv("BPA.BPS.peaks.csv")
+BPA.BPS2 <- read.csv("closest_genes_BPA.BPS.peaks.name.F1.csv")
+BPA.BPS.DO <- merge(BPA.BPS1, BPA.BPS2, by="query_region")
+write.csv(BPA.BPS.DO, "BPA.BPS.DO.combined.F1.Final.csv")
+
+
+### add fold change
+
+BPA.CON.DO <- BPA.CON.DO %>%
+  mutate(FC = if_else(avg_log2FC>=0, 2^(BPA.CON.DO$avg_log2FC), -2^(-(BPA.CON.DO$avg_log2FC))))
+write.csv(BPA.CON.DO, "BPA.CON.DO.combined.F1.Final.ATAC.csv")
+
+BPS.CON.DO <- BPS.CON.DO %>%
+  mutate(FC = if_else(avg_log2FC>=0, 2^(BPS.CON.DO$avg_log2FC), -2^(-(BPS.CON.DO$avg_log2FC))))
+write.csv(BPS.CON.DO, "BPS.CON.DO.combined.F1.Final.ATAC.csv")
+
+
+BPA.BPS.DO <- BPA.BPS.DO %>%
+  mutate(FC = if_else(avg_log2FC>=0, 2^(BPA.BPS.DO$avg_log2FC), -2^(-(BPA.BPS.DO$avg_log2FC))))
+write.csv(BPA.BPS.DO, "BPA.BPS.DO.combined.F1.Final.ATAC.csv")
+```
+
+
+```{r}
+#extract peaks position and make bed file to use Hormer for annotation
+annotations <- GetGRangesFromEnsDb(ensdb = EnsDb.Mmusculus.v79)
+seqlevelsStyle(annotations) <- "UCSC"
+genome(annotations) <- "mm10"
+Annotation(Germ) <- annotations
+
+
+
+```
+
+```{r}
+peaks <- granges(Germ)
+
+df <- data.frame(seqnames=seqnames(peaks),
+  starts=start(peaks)-1,
+  ends=end(peaks),
+  names=c(rep(".", length(peaks))),
+  scores=c(rep(".", length(peaks))),
+  strands=strand(peaks))
+
+write.table(df, file="foo.bed", quote=F, sep="\t", row.names=F, col.names=F)
+```
+

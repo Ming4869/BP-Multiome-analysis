@@ -1,0 +1,1409 @@
+
+
+```{r}
+library(Seurat)
+library(Signac)
+library(EnsDb.Mmusculus.v79)    
+library(BSgenome.Mmusculus.UCSC.mm10)
+library(ggplot2)
+library(future)
+library(dplyr)
+library(hdf5r)
+```
+
+```{r}
+F1.Germ <- readRDS("F1.Germ.rds")
+```
+
+
+```{r}
+DefaultAssay(F1.Germ)<-"ATAC"
+```
+
+
+```{r}
+#1 Find the positions of each promoter
+
+library(EnsDb.Mmusculus.v79)
+
+gene.ranges <- genes(EnsDb.Mmusculus.v79)
+gene.ranges <- gene.ranges[gene.ranges$gene_biotype == 'protein_coding', ]
+gene.ranges <- keepStandardChromosomes(gene.ranges, pruning.mode = 'coarse')
+seqlevelsStyle(gene.ranges) <- 'UCSC'
+gene.promoters <- promoters(gene.ranges)
+```
+
+
+
+
+```{r}
+#2 Find which promoters overlap a peak
+
+library(GenomicRanges)
+library(S4Vectors)
+
+peaks <- StringToGRanges(regions = rownames(F1.Germ), sep = c(":", "-"))
+hits <- findOverlaps(query = peaks, subject = gene.promoters)
+promoter.peaks <- queryHits(hits)
+write.csv(promoter.peaks, "promoter.peaks.csv")
+```
+
+
+
+```{r}
+ATAC.peaks <- ClosestFeature(
+  object = F1.Germ,
+  regions = peaks
+)
+write.csv(ATAC.peaks, "F1.Germ.peaks.total.closestfeature.csv")
+```
+
+
+
+```{r}
+# promoter peaks annotation
+
+
+
+df1<-read.csv("promoter.peaks.csv", head=T)
+df2<-read.csv("F1.Germ.peaks.total.closestfeature.csv", head=T)
+
+
+promoter.peak.anno <- merge(x=df1, y=df2, by="x")
+
+write.csv(promoter.peak.anno, "promoter annotation.csv")
+
+
+```
+
+
+```{r}
+#3 Find which promoter peaks contain the motif
+
+promoter.peaks <- read.csv("promoter.peaks.csv")
+promoter.peaks <- promoter.peaks[,2]
+df <-read.csv("F1.BPA.CON.diff_Motif_activity.combined.csv")
+
+motif.use <- c(df[,1])
+
+promoter.peaks.with.motif <- GetMotifData(object = F1.Germ)[promoter.peaks, motif.use]
+
+write.csv(promoter.peaks.with.motif, "peak_motif.BPA_overlap.csv")
+
+
+df <-read.csv("F1.BPS.CON.diff_Motif_activity.combined1.csv")
+
+motif.use <- c(df[,2])
+
+promoter.peaks.with.motif <- GetMotifData(object = F1.Germ)[promoter.peaks, motif.use]
+
+write.csv(promoter.peaks.with.motif, "peak_motif.BPS_overlap.csv")
+```
+
+
+
+```{r}
+#Combine with DAR
+df3<-read.csv("peak_motif.BPA_overlap.csv", head=T)
+df4<-read.csv("promoter annotation.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="query_region")
+write.csv(BPA.overlap, "BPA.diff_motif_peak_anno_overlap.csv")
+
+
+df3<-read.csv("peak_motif.BPS_overlap.csv", head=T)
+df4<-read.csv("promoter annotation.csv", head=T)
+
+
+BPS.overlap <- merge(x=df4, y=df3, by="query_region")
+write.csv(BPS.overlap, "BPS.diff_motif_peak_anno_overlap.csv")
+
+```
+
+
+
+
+```{r}
+#overlap with DEGs
+df3<-read.csv("GENES SP.KLF.csv", head=T)
+df4<-read.csv("F1.BPA.up.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPA.up.DMRT.csv")
+
+df3<-read.csv("GENES SP.KLF.csv", head=T)
+df4<-read.csv("F1.BPA.up.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPA.up.SP.KLF.csv")
+```
+
+
+```{r}
+df3<-read.csv("GENES DMRT.csv", head=T)
+df4<-read.csv("F1.BPS.up.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPS.up.DMRT.csv")
+
+df3<-read.csv("GENES SP.KLF.csv", head=T)
+df4<-read.csv("F1.BPS.up.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPS.up.SP.KLF.csv")
+```
+
+
+
+```{r}
+df3<-read.csv("BPS.up.DMRT.csv", head=T)
+df4<-read.csv("BPS.CON.DAR.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPS.up.DMRT.DAR.csv")
+
+df3<-read.csv("BPS.up.SP.KLF.csv", head=T)
+df4<-read.csv("BPS.CON.DAR.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPS.up.SP.KLF.DAR.csv")
+```
+
+
+
+
+```{r}
+df3<-read.csv("BPA SP1_SP4 sort.csv", head=T)
+df4<-read.csv("F1.BPA.up.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPA.up.SP1.SP4.csv")
+
+df3<-read.csv("BPS SP1_SP4 sort.csv", head=T)
+df4<-read.csv("F1.BPS.up.csv", head=T) 
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPS.up.SP1.SP4.csv")
+
+
+df3<-read.csv("BPA SP1_SP4 sort.csv", head=T)
+df4<-read.csv("F1.BPA.down.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPA.down.SP1.SP4.csv")
+
+df3<-read.csv("BPS SP1_SP4 sort.csv", head=T)
+df4<-read.csv("F1.BPS.down.csv", head=T) 
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPS.down.SP1.SP4.csv")
+```
+
+
+```{r}
+BPA <- read.csv("BPA.up.SP1.SP4.csv")
+BPS <- read.csv("BPS.up.SP1.SP4.csv")
+
+x <- list(
+  BPA = as.matrix(BPA[,2]),
+  BPS = as.matrix(BPS[,2])
+  
+    )
+
+
+library(ggVennDiagram)
+library(ggvenn)
+library(ggplot2)
+ggvenn(
+  x, 
+  fill_color = c( "#FAFA33","lightgrey"),
+  stroke_size = 0.3, set_name_size = 4
+  )
+```
+
+
+
+```{r}
+#find out BPA/s overlap up/down target DEGs, remove duplicates after merge the genelist
+df3<-read.csv("BPA.down.SP1.SP4.csv", head=T)
+df4<-read.csv("BPS.down.SP1.SP4.csv", head=T) 
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPA.S.down.SP1.SP4.csv")
+
+df3<-read.csv("BPA.up.SP1.SP4.csv", head=T)
+df4<-read.csv("BPS.up.SP1.SP4.csv", head=T) 
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPA.S.up.SP1.SP4.csv")
+```
+
+
+
+
+
+
+```{r}
+#select FC>=2, plot heatmap for TF motif activity and TF gene expression
+
+library(ggplot2)
+library(dplyr)
+#load the genes that I want to use
+df <- read.csv("TF fold 2.csv")
+df4 <- df[,3]
+df5 <- df[,1]
+df6 <- df[,2]
+df1 <- AverageExpression(
+  F1.Germ,
+  assays = "RNA",
+  features = df4,
+  return.seurat = FALSE,
+  group.by = "treatment",
+  add.ident = NULL,
+  slot = "data",
+  verbose = TRUE
+)
+
+write.csv(df1, "heatmap_TFgene.csv")
+
+
+df2 <- AverageExpression(
+  F1.Germ,
+  assays = "chromvar",
+  features = df5,
+  return.seurat = FALSE,
+  group.by = "treatment",
+  add.ident = NULL,
+  slot = "data",
+  verbose = TRUE
+)
+
+write.csv(df2, "heatmap_TFgene.motif.csv")
+```
+
+
+
+
+```{r}
+ df2 <- read.csv("heatmap_TFgene.csv")
+ #myCol <- colorRampPalette(c("blue", "white", "red"))(256)
+ 
+ rownames(df2) <- df2$Gene
+gsn <- grep("Gene", colnames(df2))
+df2 <- df2[,-gsn]
+
+
+
+group_df = data.frame(Groups=as.factor(c("CON", "BPA","BPS")))
+rownames(group_df) <- colnames(df2)
+ann_colors = list(
+  Groups = c(CON="#D4D4D4", BPA="#E899AC",BPS="#6C9C9D"))
+
+
+library(RColorBrewer)
+library(circlize)
+
+
+
+png(file="heatmap.TF.genes.png", width=3,height=6.0,units="in",res=600)
+
+library("pheatmap")
+my_heatmap<-ComplexHeatmap::pheatmap (as.matrix(df2), scale="row", color = colorRampPalette(brewer.pal(5, "GnBu"))(50), 
+          border_color = NA, annotation_col = group_df, annotation_colors = ann_colors, cluster_rows= FALSE, cluster_cols = FALSE, cellwidth=40, cellheight=8, show_colnames = F, angle_col = c("0"), annotation_legend=F, fontsize_row = 8,  legend_labels = c("-2","-1","0","1","2"), name =  "GE",fontsize = 3 )
+
+
+draw(my_heatmap)
+ dev.off()
+
+
+```
+
+
+
+
+
+```{r}
+df3 <- read.csv("heatmap_TFgene.motif.csv")
+ 
+ 
+ rownames(df3) <- df3$motif
+gsn <- grep("motif", colnames(df3))
+df3 <- df3[,-gsn]
+
+
+
+group_df = data.frame(Groups=as.factor(c("CON", "BPA","BPS")))
+rownames(group_df) <- colnames(df3)
+ann_colors = list(
+  Groups = c(CON="#D4D4D4", BPA="#E899AC",BPS="#6C9C9D"))
+
+
+
+```
+
+
+
+
+
+```{r}
+library(RColorBrewer)
+library(circlize)
+library(ComplexHeatmap)
+library(ggplot2)
+library(dplyr)
+
+png(file="heatmap.TF.motif.activity.png", width=3,height=6.0,units="in",res=600)
+
+library("pheatmap")
+my_heatmap <- ComplexHeatmap::pheatmap (as.matrix(df3), scale="row", color = colorRampPalette(brewer.pal(5, "GnBu"))(50), 
+          border_color = NA, annotation_col = group_df, annotation_colors = ann_colors, cluster_rows= FALSE, cluster_cols = FALSE, cellwidth=40, cellheight=8, show_colnames = F, angle_col = c("0"), annotation_legend=F, fontsize_row = 8,  legend_labels = c("-2","-1","0","1","2"),legend = TRUE,  name =  "TF",fontsize = 3 )
+my_heatmap
+draw(my_heatmap)
+ dev.off()
+```
+
+
+
+```{r}
+#find overlapping genes contain motif and up-regulated DEGs
+df4<-read.csv("BPA.motif present genes.csv", head=T)
+df5<-read.csv("F1.BPA.up.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df5, by="gene_name")
+write.csv(BPA.overlap, "BPA.ATAC.GEXs.top4.motif gene.csv")
+
+
+df4<-read.csv("BPS.motif present genes.csv", head=T)
+df5<-read.csv("F1.BPS.up.csv", head=T)
+
+
+BPS.overlap <- merge(x=df4, y=df5, by="gene_name")
+write.csv(BPS.overlap, "BPS.ATAC.GEXs.top4.motif gene.csv")
+```
+
+
+
+
+
+```{r}
+df4<-read.csv("BPS.ATAC.GEXs.top4.motif gene.csv", head=T)
+df5<-read.csv("BPA.ATAC.GEXs.top4.motif gene.csv", head=T)
+
+
+overlap <- merge(x=df5, y=df4, by="gene_name")
+write.csv(overlap, "BPA.S.ATAC.GEXs.top4.motif gene.csv")
+```
+
+
+
+```{r}
+# Venn of BPA.S overlap genes
+
+df4<-read.csv("BPS.ATAC.GEXs.top4.motif gene.csv", head=T)
+df5<-read.csv("BPA.ATAC.GEXs.top4.motif gene.csv", head=T)
+
+x <- list(
+  BPA = as.matrix(df5[,2]), 
+  BPS = as.matrix(df4[,2]) 
+    )
+
+
+library(ggVennDiagram)
+library(ggvenn)
+library(ggplot2)
+ggvenn(
+  x, 
+  fill_color = c("#CD534CFF", "#FAFA33"),
+  stroke_size = 0.2, set_name_size = 4
+  )
+ggsave("Venn.atac.TF potential targets.tiff", dpi = 300, width = 4, height = 3, bg="white")
+```
+
+
+```{r}
+#plot pseudotime heatmap 
+
+library(monocle)
+library(ComplexHeatmap)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(circlize)
+library(monocle3)
+
+modulated_genes <- graph_test(F1.germ.cds, neighbor_graph = "principal_graph", cores = 4)
+genes<- row.names(subset(modulated_genes, q_value < 0.05& morans_I > 0.1))
+genes
+
+df <- read.csv("BPA.S.up.SP.KLF.csv")
+Genes.module <- df[,2]
+
+#q_value == 0 & morans_I > 0.25
+pt.matrix <- exprs(F1.germ.cds)[match(Genes.module,rownames(rowData(F1.germ.cds))),order(pseudotime(F1.germ.cds))]
+#Can also use "normalized_counts" instead of "exprs" to use various normalization methods, for example:
+#normalized_counts(cds, norm_method = "log")
+
+pt.matrix <- t(apply(pt.matrix,1,function(x){smooth.spline(x,df=3)$y}))
+pt.matrix <- t(apply(pt.matrix,1,function(x){(x-mean(x))/sd(x)}))
+rownames(pt.matrix) <- Genes.module 
+
+png(file="F1.pseudoheatmap of potential KLF.SP. TF targets1.png", width=4,height=4,units="in",res=1200)
+
+TF <- Heatmap(
+  pt.matrix,
+  name                         = "z-score",
+  col                          = colorRamp2(seq(from=-2,to=2,length=9),(brewer.pal(9, "YlOrRd"))),
+  show_row_names               = TRUE,
+  show_column_names            = FALSE,
+  row_names_gp                 = gpar(fontsize = 2),
+  row_title_rot                = 0,
+  cluster_rows                 = TRUE,
+  cluster_row_slices           = FALSE,
+  cluster_columns              = FALSE,
+  width = unit(6, "cm"),
+  use_raster = FALSE)
+
+
+draw(TF)
+ dev.off()
+
+```
+
+```{r}
+df <- read.csv("F1.DMRT1.A.S.genes.csv")
+Genes.module <- df[,2]
+
+#q_value == 0 & morans_I > 0.25
+pt.matrix <- exprs(F1.germ.cds)[match(Genes.module,rownames(rowData(F1.germ.cds))),order(pseudotime(F1.germ.cds))]
+#Can also use "normalized_counts" instead of "exprs" to use various normalization methods, for example:
+#normalized_counts(cds, norm_method = "log")
+
+pt.matrix <- t(apply(pt.matrix,1,function(x){smooth.spline(x,df=3)$y}))
+pt.matrix <- t(apply(pt.matrix,1,function(x){(x-mean(x))/sd(x)}))
+rownames(pt.matrix) <- Genes.module 
+
+png(file="F1.pseudoheatmap of potential DMRT1 TF targets.png", width=4,height=4,units="in",res=1200)
+
+TF <- Heatmap(
+  pt.matrix,
+  name                         = "z-score",
+  col                          = colorRamp2(seq(from=-2,to=2,length=9),(brewer.pal(9, "GnBu"))),
+  show_row_names               = TRUE,
+  show_column_names            = FALSE,
+  row_names_gp                 = gpar(fontsize = 2),
+  row_title_rot                = 0,
+  cluster_rows                 = TRUE,
+  cluster_row_slices           = FALSE,
+  cluster_columns              = FALSE,
+  width = unit(5, "cm"),
+  use_raster = FALSE)
+
+
+draw(TF)
+ dev.off()
+```
+
+
+```{r}
+df <- read.csv("BPA.S.up.SP.KLF.DMRT1.csv")
+Genes.module <- df[,2]
+
+#q_value == 0 & morans_I > 0.25
+pt.matrix <- exprs(F1.germ.cds)[match(Genes.module,rownames(rowData(F1.germ.cds))),order(pseudotime(F1.germ.cds))]
+#Can also use "normalized_counts" instead of "exprs" to use various normalization methods, for example:
+#normalized_counts(cds, norm_method = "log")
+
+pt.matrix <- t(apply(pt.matrix,1,function(x){smooth.spline(x,df=3)$y}))
+pt.matrix <- t(apply(pt.matrix,1,function(x){(x-mean(x))/sd(x)}))
+rownames(pt.matrix) <- Genes.module 
+
+png(file="pseudoheatmap of potential BPA.S TF SP KLF DMRT1 targets.png", width=3,height=3,units="in",res=1200)
+
+TF <- Heatmap(
+  pt.matrix,
+  name                         = "z-score",
+  col                          = colorRamp2(seq(from=-2,to=2,length=9),(brewer.pal(9, "Purples"))),
+  show_row_names               = TRUE,
+  show_column_names            = FALSE,
+  row_names_gp                 = gpar(fontsize = 2),
+  row_title_rot                = 0,
+  cluster_rows                 = TRUE,
+  cluster_row_slices           = FALSE,
+  cluster_columns              = FALSE,
+  width = unit(2.5, "cm"),
+  use_raster = FALSE)
+
+
+draw(TF)
+ dev.off()
+```
+
+
+
+```{r}
+#GO analysis
+
+PsDEs <- read.csv("BPA.up.SP.KLF.DAR.csv")
+FoldChangePsDEs <- PsDEs[,3]
+names(FoldChangePsDEs) <- as.character(PsDEs[,2])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+
+idPsDEs <- names(FoldChangePsDEs)
+PsDEs$ENTREZID <- convertIDs(idPsDEs, "SYMBOL","ENTREZID", org.Mm.eg.db)
+head(PsDEs, 4)
+  
+
+GOPsDEs <- enrichGO(PsDEs$ENTREZID,   
+                    
+                    OrgDb         = 'org.Mm.eg.db',
+                    ont           = "ALL",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.05,
+                    qvalueCutoff  = 0.05,
+                    readable      = TRUE)
+
+dim(GOPsDEs)
+
+
+write.csv(GOPsDEs, "F1.BPA.up.SP KLF.DAR.GO.csv")
+
+
+
+
+
+
+```
+
+
+
+
+```{r}
+df1 <-read.csv("F1.DMRT1.genes.csv")
+df2 <-read.csv("F2.DMRT1.genes.csv")
+df3 <-read.csv("F3.DMRT1.genes.csv")
+
+overlap <- merge(x=df1, y=df2, z=df3, by="gene_name")
+write.csv(overlap, "F1-F3.DMRT1.genes.csv")
+```
+
+
+
+```{r}
+df1 <-read.csv("F1.DMRT1.genes.csv")
+df2 <-read.csv("F1.BPA.up.csv")
+df3 <-read.csv("F1.BPS.up.csv")
+
+overlap <- merge(x=df2, y=df1, by="gene_name")
+write.csv(overlap, "F1.DMRT1.A.genes.csv")
+
+
+
+df1 <-read.csv("F1.DMRT1.A.genes.csv")
+df2 <-read.csv("F1.DMRT1.S.genes.csv")
+
+overlap <- merge(x=df2, y=df1, by="gene_name")
+write.csv(overlap, "F1.DMRT1.A.S.genes.csv")
+
+```
+
+
+
+
+
+```{r}
+df1 <- read.csv("F1-F3.DMRT1.genes.csv")
+df2 <- read.csv("BPA.up.overlap.csv")
+df3 <- read.csv("BPS.up.overlap.csv")
+
+overlap <- merge(x=df1, y=df2, by="gene_name")
+write.csv(overlap, "F1-F3.BPA.DMRT1.genes.csv")
+
+overlap <- merge(x=df1, y=df3, by="gene_name")
+write.csv(overlap, "F1-F3.BPS.DMRT1.genes.csv")
+```
+
+
+
+```{r}
+df1 <- read.csv("F1-F3.BPA.DMRT1.genes.csv")
+df2 <- read.csv("F1-F3.BPS.DMRT1.genes.csv")
+
+overlap <- merge(x=df1, y=df2, by="gene_name")
+write.csv(overlap, "F1-F3.BPA.S.DMRT1.genes.csv")
+
+```
+
+
+```{r}
+#GO analysis
+
+PsDEs <- read.csv("F1-F3.BPA.S.DMRT1.genes.csv")
+FoldChangePsDEs <- PsDEs[,3]
+names(FoldChangePsDEs) <- as.character(PsDEs[,2])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+idPsDEs <- PsDEs[,2]
+idPsDEs <- names(FoldChangePsDEs)
+PsDEs$ENTREZID <- convertIDs(idPsDEs, "SYMBOL","ENTREZID", org.Mm.eg.db)
+head(PsDEs, 4)
+  
+
+GOPsDEs <- enrichGO(PsDEs$ENTREZID,   
+                    
+                    OrgDb         = 'org.Mm.eg.db',
+                    ont           = "BP",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.05,
+                    qvalueCutoff  = 0.05,
+                    readable      = TRUE)
+
+dim(GOPsDEs)
+
+
+write.csv(GOPsDEs, "F1-F3.BPA.S.DMRT1.genes.GO.csv")
+
+
+filter <-simplify(GOPsDEs, cutoff = 0.7, by = "p.adjust", select_fun = min)
+
+write.csv(filter, "F1-F3.BPA.S.DMRT1.genes.GO.filter.csv")
+
+```
+
+
+```{r}
+# load Venn diagram package
+library("VennDiagram")
+  
+# move to new plotting page
+grid.newpage()
+  
+# create pairwise Venn diagram
+ #venn.plot <- draw.pairwise.venn(area1=71, area2=107,cross.area=38,category=c("BPA","BPS"),fill=c( "#CD534CFF","#FAFA33"), cex = 3, cat.cex = 3)
+#venn.plot <- draw.pairwise.venn(area1=71, area2=107,cross.area=38, fill=c( "#CD534CFF","#FAFA33"), cex = 3, cat.cex = 4)
+
+png(file="F1 sp1_4 targets overlap A and S up.png", width=4,height=2,units="in",res=1200)
+venn.plot <- draw.pairwise.venn(area1           = 1024+2153,
+                                area2           = 365+2153,
+                                cross.area      = 2153,
+                                fill            = c("red","blue"),
+                                lty             = "blank",
+                                cex             = 3,
+                                cat.cex         = 2,
+                                cat.pos         = c(285, 105),
+                                cat.dist        = -0.02,
+                                cat.just        = list(c(-1, -1), c(1, 1)),
+                                
+                                ext.pos         = 30,
+                                ext.dist        = -0.1,
+                                ext.length      = 0.85,
+                                ext.line.lwd    = 0,
+                                ext.line.lty    = "dashed",
+                                rotation.degree = 0,
+                                offset = 0
+                               )
+
+
+```
+
+```{r}
+
+png(file="F3 DMRT1 targets down overlap chip.png", width=3,height=2,units="in",res=1200)
+df2 <- read.csv("F3.DMRT1.A.down.genes overlap chip.csv", header = T)
+df3 <- read.csv("F3.DMRT1.S.down.genes overlap chip.csv", header = T)
+
+
+
+MyVennDiagram = venn.diagram(
+    x = list(
+      A = as.matrix(df2[,2]),
+      B = as.matrix(df3[,2])
+    ),
+    main = "",
+    main.cex = NULL,
+    filename = NULL,
+    lwd = 1,
+    lty             = "blank",
+    fill = c( "pink","cornflowerblue"),
+    alpha = 0.75,
+    label.col = "black",
+    cex=c(2,2,2),
+    fontface = "plain",
+    cat.col = c( "pink","cornflowerblue"),
+    cat.cex = 0,
+    cat.fontfamily = "serif",
+    cat.fontface = "plain",
+    cat.dist = c(-0.3, 0.05),
+    cat.pos = c(-20, 14),
+    cat.default.pos = "text",rotation.degree = 0,
+  offset = 1,ext.line.lwd    = 2,
+                                ext.line.lty    = "dashed")
+
+  grid.newpage()
+  grid.draw(MyVennDiagram)
+```
+
+
+
+```{r}
+df1 <-read.csv("F1.DMRT1.genes.csv")
+df2 <-read.csv("F1.BPA.down.csv")
+df3 <-read.csv("F1.BPS.down.csv")
+
+overlap <- merge(x=df2, y=df1, by="gene_name")
+write.csv(overlap, "F1.DMRT1.A.down.genes.csv")
+
+overlap <- merge(x=df3, y=df1, by="gene_name")
+write.csv(overlap, "F1.DMRT1.S.down.genes.csv")
+
+
+df1 <-read.csv("F2.DMRT1.genes.csv")
+df2 <-read.csv("F2.BPA.down.csv")
+df3 <-read.csv("F2.BPS.down.csv")
+
+overlap <- merge(x=df2, y=df1, by="gene_name")
+write.csv(overlap, "F2.DMRT1.A.down.genes.csv")
+
+overlap <- merge(x=df3, y=df1, by="gene_name")
+write.csv(overlap, "F2.DMRT1.S.down.genes.csv")
+
+
+df1 <-read.csv("F3.DMRT1.genes.csv")
+df2 <-read.csv("F3.BPA.down.csv")
+df3 <-read.csv("F3.BPS.down.csv")
+
+overlap <- merge(x=df2, y=df1, by="gene_name")
+write.csv(overlap, "F3.DMRT1.A.down.genes.csv")
+
+overlap <- merge(x=df3, y=df1, by="gene_name")
+write.csv(overlap, "F3.DMRT1.S.down.genes.csv")
+
+df1 <-read.csv("F2.DMRT1.genes.csv")
+df2 <-read.csv("F2.BPA.up.csv")
+df3 <-read.csv("F2.BPS.up.csv")
+
+overlap <- merge(x=df2, y=df1, by="gene_name")
+write.csv(overlap, "F2.DMRT1.A.up.genes.csv")
+
+overlap <- merge(x=df3, y=df1, by="gene_name")
+write.csv(overlap, "F2.DMRT1.S.up.genes.csv")
+
+
+df1 <-read.csv("F3.DMRT1.genes.csv")
+df2 <-read.csv("F3.BPA.up.csv")
+df3 <-read.csv("F3.BPS.up.csv")
+
+overlap <- merge(x=df2, y=df1, by="gene_name")
+write.csv(overlap, "F3.DMRT1.A.up.genes.csv")
+
+overlap <- merge(x=df3, y=df1, by="gene_name")
+write.csv(overlap, "F3.DMRT1.S.up.genes.csv")
+```
+
+
+
+
+
+```{r}
+library("dplyr")   
+df1 <- read.csv("DMRT1 Targets P9 genes.csv", header = T)
+df2 <- read.csv("DMRT1 Targets P9 genes down.csv", header = T)
+
+
+diff <-  anti_join(x=df1, y=df2, by = join_by(gene_name == gene_name))
+write.csv(diff, "DMRT1 Targets P9 genes up.csv")
+
+
+
+```
+
+
+
+
+```{r}
+df1 <-read.csv("DMRT1 associated genes chip data 2010.csv")
+df2 <-read.csv("DMRT1 Targets P9 genes up.csv")
+df3 <-read.csv("DMRT1 Targets P9 genes down.csv")
+df4 <-read.csv("F1.DMRT1.genes.csv")
+df5 <-read.csv("F2.DMRT1.genes.csv")
+df6 <-read.csv("F3.DMRT1.genes.csv")
+
+overlap <- merge(x=df4, y=df1, by="gene_name")
+write.csv(overlap, "F1.DMRT1.chip overlap.genes.csv")
+
+overlap <- merge(x=df5, y=df1, by="gene_name")
+write.csv(overlap, "F2.DMRT1.chip overlap.genes.csv")
+
+overlap <- merge(x=df6, y=df1, by="gene_name")
+write.csv(overlap, "F3.DMRT1.chip overlap.genes.csv")
+
+
+df4 <-read.csv("F1.DMRT1.A.up.genes.csv")
+df5 <-read.csv("F2.DMRT1.A.up.genes.csv")
+df6 <-read.csv("F3.DMRT1.A.up.genes.csv")
+
+overlap <- merge(x=df4, y=df1, by="gene_name")
+write.csv(overlap, "F1.DMRT1.A.up.genes overlap chip.csv")
+
+overlap <- merge(x=df5, y=df1, by="gene_name")
+write.csv(overlap, "F2.DMRT1.A.up.genes overlap chip.csv")
+
+overlap <- merge(x=df1, y=df6, by="gene_name")
+write.csv(overlap, "F3.DMRT1.A.up.genes overlap chip.csv")
+
+df4 <-read.csv("F1.DMRT1.S.up.genes.csv")
+df5 <-read.csv("F2.DMRT1.S.up.genes.csv")
+df6 <-read.csv("F3.DMRT1.S.up.genes.csv")
+
+overlap <- merge(x=df1, y=df4, by="gene_name")
+write.csv(overlap, "F1.DMRT1.S.up.genes overlap chip.csv")
+
+overlap <- merge(x=df1, y=df5, by="gene_name")
+write.csv(overlap, "F2.DMRT1.S.up.genes overlap chip.csv")
+
+overlap <- merge(x=df1, y=df6, by="gene_name")
+write.csv(overlap, "F3.DMRT1.S.up.genes overlap chip.csv")
+
+
+
+df4 <-read.csv("F1.DMRT1.A.down.genes.csv")
+df5 <-read.csv("F2.DMRT1.A.down.genes.csv")
+df6 <-read.csv("F3.DMRT1.A.down.genes.csv")
+
+overlap <- merge(x=df1, y=df4, by="gene_name")
+write.csv(overlap, "F1.DMRT1.A.down.genes overlap chip.csv")
+
+overlap <- merge(x=df1, y=df5, by="gene_name")
+write.csv(overlap, "F2.DMRT1.A.down.genes overlap chip.csv")
+
+overlap <- merge(x=df1, y=df6, by="gene_name")
+write.csv(overlap, "F3.DMRT1.A.down.genes overlap chip.csv")
+
+df4 <-read.csv("F1.DMRT1.S.down.genes.csv")
+df5 <-read.csv("F2.DMRT1.S.down.genes.csv")
+df6 <-read.csv("F3.DMRT1.S.down.genes.csv")
+
+overlap <- merge(x=df1, y=df4, by="gene_name")
+write.csv(overlap, "F1.DMRT1.S.down.genes overlap chip.csv")
+
+overlap <- merge(x=df1, y=df5, by="gene_name")
+write.csv(overlap, "F2.DMRT1.S.down.genes overlap chip.csv")
+
+overlap <- merge(x=df1, y=df6, by="gene_name")
+write.csv(overlap, "F3.DMRT1.S.down.genes overlap chip.csv")
+```
+
+
+
+
+
+
+```{r}
+df1 <- read.csv("F1.DMRT1.A.up.genes.csv", header = T)
+df2 <- read.csv("F1.DMRT1.A.up.genes overlap chip.csv", header = T)
+df3 <- read.csv("F1.DMRT1.S.up.genes overlap chip.csv", header = T)
+df4 <- read.csv("F1.DMRT1.S.up.genes.csv", header = T)
+
+
+
+x <- list(
+  F1.BPA = as.matrix(df1[,1]), 
+  
+ F1.BPA.ChIP = as.matrix(df2[,1]),
+  F1.BPS.ChIP = as.matrix(df3[,1]), 
+  
+ F1.BPS = as.matrix(df4[,1])
+   
+    )
+
+
+library(ggVennDiagram)
+library(ggvenn)
+library(ggplot2)
+ggvenn(x)   
+
+ggsave("Venn.F1.DMRT1 targets chip overlap.tiff", dpi = 300, width = 6, height = 4, bg="white")
+```
+
+
+```{r}
+
+df2 <- read.csv("F1 SP KLF.A.down.genes.csv", header = T)
+df3 <- read.csv("F1 SP KLF.S.down.genes.csv", header = T)
+
+
+x <- list(
+  
+  
+ F1.BPA = as.matrix(df2[,2]),
+  F1.BPS = as.matrix(df3[,2])
+  
+ 
+   
+    )
+
+
+library(ggVennDiagram)
+library(ggvenn)
+library(ggplot2)
+
+ggvenn(
+  x, 
+  
+  stroke_size = 0.2, set_name_size = 4
+  )
+#ggsave("Venn.F1.DMRT1 targets chip only.tiff", dpi = 300, width = 4, height = 3, bg="white")
+```
+
+```{r}
+#GO analysis
+
+PsDEs <- read.csv("F1 SP KLF.A.S.down.genes overlap.csv")
+FoldChangePsDEs <- PsDEs[,3]
+names(FoldChangePsDEs) <- as.character(PsDEs[,2])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+idPsDEs <- PsDEs[,2]
+idPsDEs <- names(FoldChangePsDEs)
+PsDEs$ENTREZID <- convertIDs(idPsDEs, "SYMBOL","ENTREZID", org.Mm.eg.db)
+head(PsDEs, 4)
+  
+
+GOPsDEs <- enrichGO(PsDEs$ENTREZID,   
+                    
+                    OrgDb         = 'org.Mm.eg.db',
+                    ont           = "BP",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.05,
+                    qvalueCutoff  = 0.05,
+                    readable      = TRUE)
+
+dim(GOPsDEs)
+
+
+write.csv(GOPsDEs, "F1 SP KLF.A.S.down.genes overlap.GO.csv")
+
+
+filter <-simplify(GOPsDEs, cutoff = 0.7, by = "p.adjust", select_fun = min)
+
+write.csv(filter, "F1 SP KLF.A.S.down.genes overlap.GO.filter.csv")
+```
+
+
+
+```{r}
+a <- c("cellular response to calcium ion","cellular response to inorganic substance","cellular response to metal ion","SMAD protein signal transduction","transmembrane receptor protein serine/threonine kinase signaling pathway")
+
+p1 <- barplot(GOPsDEs, showCategory = a, font.size=8, x = "GeneRatio")+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color="black", size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(legend.key.width = unit(0.2,"cm"))+theme(legend.key.height = unit(0.3,"cm"))+theme(legend.text = element_text(size = 6))+theme(legend.title = element_text(size = 6))+xlab("GeneRatio")+ggtitle("SP1 KLF10 potential down-regulated target genes")+theme(plot.title = element_text(size=10,face = "bold"))+theme(axis.title = element_text(size = 8))+theme(axis.text.x = element_text(angle = 30, size=6))
+p1
+
+
+ggsave("F1 SP KLF.A.S.down.genes overlap.tiff", width=6, height=3, dpi=300, p1)
+```
+
+
+```{r}
+#GO analysis
+
+PsDEs <- read.csv("F1.DMRT1.A.S.up.genes.csv")
+FoldChangePsDEs <- PsDEs[,3]
+names(FoldChangePsDEs) <- as.character(PsDEs[,2])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+idPsDEs <- PsDEs[,2]
+idPsDEs <- names(FoldChangePsDEs)
+PsDEs$ENTREZID <- convertIDs(idPsDEs, "SYMBOL","ENTREZID", org.Mm.eg.db)
+head(PsDEs, 4)
+  
+
+GOPsDEs <- enrichGO(PsDEs$ENTREZID,   
+                    
+                    OrgDb         = 'org.Mm.eg.db',
+                    ont           = "BP",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.05,
+                    qvalueCutoff  = 0.05,
+                    readable      = TRUE)
+
+dim(GOPsDEs)
+
+
+write.csv(GOPsDEs, "F1.DMRT1.A.S.up.genes.GO.csv")
+
+
+filter <-simplify(GOPsDEs, cutoff = 0.7, by = "p.adjust", select_fun = min)
+
+write.csv(filter, "F1.DMRT1.A.S.up.genes.GO.filter.csv")
+```
+
+```{r}
+a <- c("intrinsic apoptotic signaling pathway","mRNA processing","ribonucleoprotein complex biogenesis","cell cycle phase transition","ATP synthesis coupled proton transport")
+
+p1 <- barplot(GOPsDEs, showCategory = a, font.size=8, x = "GeneRatio")+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color="black", size=6))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(legend.key.width = unit(0.2,"cm"))+theme(legend.key.height = unit(0.2,"cm"))+theme(legend.text = element_text(size = 6))+theme(legend.title = element_text(size = 6))+xlab("GeneRatio")+ggtitle("DMRT1 potential targets")+theme(plot.title = element_text(size=10,face = "bold"))+theme(axis.title = element_text(size = 8))+theme(axis.text.x = element_text(angle = 30, size=6))
+
+
+ggsave("F1 DMRT1.A.S.up.genes.GO.tiff", width=3.4, height=2, dpi=300, p1)
+```
+
+
+
+```{r}
+
+df <- read.csv("F1 SP KLF.A.S.down.genes overlap.csv")
+Genes.module <- df[,2]
+
+#q_value == 0 & morans_I > 0.25
+pt.matrix <- exprs(F1.germ.cds)[match(Genes.module,rownames(rowData(F1.germ.cds))),order(pseudotime(F1.germ.cds))]
+#Can also use "normalized_counts" instead of "exprs" to use various normalization methods, for example:
+#normalized_counts(cds, norm_method = "log")
+
+pt.matrix <- t(apply(pt.matrix,1,function(x){smooth.spline(x,df=3)$y}))
+pt.matrix <- t(apply(pt.matrix,1,function(x){(x-mean(x))/sd(x)}))
+rownames(pt.matrix) <- Genes.module 
+
+png(file="pseudoheatmap of potential klf sp down.targets A S overlap.png", width=3,height=3,units="in",res=1200)
+
+TF <- Heatmap(
+  pt.matrix,
+  name                         = "z-score",
+  col                          = colorRamp2(seq(from=-2,to=2,length=9),(brewer.pal(9, "Purples"))),
+  show_row_names               = TRUE,
+  show_column_names            = FALSE,
+  row_names_gp                 = gpar(fontsize = 2),
+  row_title_rot                = 0,
+  cluster_rows                 = TRUE,
+  cluster_row_slices           = FALSE,
+  cluster_columns              = FALSE,
+  width = unit(2.5, "cm"),
+  use_raster = FALSE,
+  heatmap_legend_param=list(legend_height = unit(2, "cm"),at = c(-2,-1, 0, 1, 2), title = "z-score",legend_width= unit(0.2, "cm"),
+                labels_gp = gpar(font = 1, face="plain"))
+    )
+
+
+draw(TF)
+
+
+ dev.off()
+```
+```{r}
+df4 <-read.csv("GENES SP.KLF.csv")
+df5 <-read.csv("F1.BPA.down.csv")
+df6 <-read.csv("F1.BPS.down.csv")
+
+overlap <- merge(x=df4, y=df5, by="gene_name")
+write.csv(overlap, "F1 SP KLF.A.down.genes.csv")
+
+
+
+overlap <- merge(x=df6, y=df4, by="gene_name")
+write.csv(overlap, "F1 SP KLF.S.down.genes.csv")
+
+
+
+df7<-read.csv("F1 SP KLF.A.down.genes.csv")
+df8<-read.csv("F1 SP KLF.S.down.genes.csv")
+overlap <- merge(x=df7, y=df8, by="gene_name")
+write.csv(overlap, "F1 SP KLF.A.S.down.genes overlap.csv")
+
+
+
+```
+
+
+```{r}
+df4 <-read.csv("F3.DMRT1.A.down.genes.csv")
+df5 <-read.csv("F3.DMRT1.S.down.genes.csv")
+
+
+overlap <- merge(x=df4, y=df5, by="gene_name")
+write.csv(overlap, "F3.DMRT1.A.S.down.genes.csv")
+
+df7<-read.csv("F1-F2.DMRT1.S.down.genes.csv")
+
+overlap <- merge(x=df6, y=df7, by="gene_name")
+write.csv(overlap, "F1-F3.DMRT1.S.down.genes.csv")
+
+```
+
+
+```{r}
+df1 <-read.csv("dmrt1_human chipseq anno.csv")
+df2 <-read.csv("dmrt1_adult mouse chipseq anno.csv")
+
+df4 <-read.csv("F1.DMRT1.S.down.genes.csv")
+df5 <-read.csv("F2.DMRT1.S.down.genes.csv")
+df6 <-read.csv("F3.DMRT1.S.down.genes.csv")
+
+
+overlap <- merge(x=df1, y=df4, by="gene_name")
+write.csv(overlap, "F1 human chip overlap S.down.genes.csv")
+
+overlap <- merge(x=df1, y=df5, by="gene_name")
+write.csv(overlap, "F2 human chip overlap S.down.genes.csv")
+
+overlap <- merge(x=df1, y=df6, by="gene_name")
+write.csv(overlap, "F3 human chip overlap S.down.genes.csv")
+
+
+overlap <- merge(x=df2, y=df4, by="gene_name")
+write.csv(overlap, "F1 adult mouse chip overlap S.down.genes.csv")
+
+overlap <- merge(x=df2, y=df5, by="gene_name")
+write.csv(overlap, "F2 adult mouse chip overlap S.down.genes.csv")
+
+overlap <- merge(x=df2, y=df6, by="gene_name")
+write.csv(overlap, "F3 adult mouse chip overlap S.down.genes.csv")
+
+```
+
+
+
+
+
+```{r}
+df1 <- read.csv("F1.DMRT1.A.up.genes overlap chip.csv")
+df2 <- read.csv("F1 adult mouse chip overlap A.up.genes.csv", header = T)
+df3 <- read.csv("F1 human chip overlap A.up.genes.csv", header = T)
+
+
+x <- list(
+  
+  F1.P9=as.matrix(df1[,2]),
+ F1.Adult.mouse = as.matrix(df2[,2]),
+  F1.human = as.matrix(df3[,2])
+  
+ 
+   
+    )
+
+
+library(ggVennDiagram)
+library(ggvenn)
+library(ggplot2)
+
+ggvenn(
+  x, 
+  
+  stroke_size = 0.2, set_name_size = 4
+  )
+#ggsave("Venn.F1.DMRT1 targets chip only.tiff", dpi = 300, width = 4, height = 3, bg="white")
+```
+
+
+```{r}
+df3<-read.csv("F1.BPA.up.csv", head=T)
+df4<-read.csv("F1.BPS.up.csv", head=T)
+df<-read.csv("F1.BPA.S.overlapped.SP1.KLF10 potential targets.csv", header = T)
+
+overlap <- merge(x=df4, y=df3, by="gene_name")
+overlap <- merge(x=overlap, y=df, by="gene_name")
+
+write.csv(overlap, "F1.BPA.S.overlapped.SP1.KLF10 potential targets.csv")
+```
+
+
+```{r}
+PsDEs <- read.csv("F1.BPA.S.overlapped.SP1.KLF10 potential targets.csv")  
+FoldChangePsDEs <- PsDEs[,3]
+names(FoldChangePsDEs) <- as.character(PsDEs[,2])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+convertIDs <- function( ids, fromKey, toKey, db, ifMultiple=c( "putNA", "useFirst" ) ) {
+   stopifnot( inherits( db, "AnnotationDb" ) )
+   ifMultiple <- match.arg( ifMultiple )
+   suppressWarnings( selRes <- AnnotationDbi::select( 
+      db, keys=ids, keytype=fromKey, columns=c(fromKey,toKey) ) )
+   if( ifMultiple == "putNA" ) {
+      duplicatedIds <- selRes[ duplicated( selRes[,1] ), 1 ]   
+      selRes <- selRes[ ! selRes[,1] %in% duplicatedIds, ] }
+   return( selRes[ match( ids, selRes[,1] ), 2 ] )
+}
+
+idPsDEs <- names(FoldChangePsDEs)
+PsDEs$ENTREZID <- convertIDs(idPsDEs, "SYMBOL","ENTREZID", org.Mm.eg.db)
+head(PsDEs, 4)
+  
+  
+  
+
+
+
+GOPsDEs.BP <- enrichGO(PsDEs$ENTREZID,   
+                    universe      = AllDEs$ENTREZID,
+                    OrgDb         = 'org.Mm.eg.db',
+                    ont           = "BP",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.05,
+                    qvalueCutoff  = 0.05,
+                    readable      = TRUE)
+```
+```{r}
+#SP4 KLF5 potential targets
+df3<-read.csv("SP4 KLF5 motif contain genes.csv", head=T)
+df4<-read.csv("F1.BPA.up.csv", head=T)
+df5<-read.csv("F1.BPS.up.csv", head=T)
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPA.up.SP4 KLF5.csv")
+
+
+BPS.overlap <- merge(x=df5, y=df3, by="gene_name")
+write.csv(BPS.overlap, "BPS.up.SP4 KLF5.csv")
+
+
+df4<-read.csv("F1.BPA.down.csv", head=T)
+df5<-read.csv("F1.BPS.down.csv", head=T)
+
+BPA.overlap <- merge(x=df4, y=df3, by="gene_name")
+write.csv(BPA.overlap, "BPA.down.SP4 KLF5.csv")
+
+
+BPS.overlap <- merge(x=df5, y=df3, by="gene_name")
+write.csv(BPS.overlap, "BPS.down.SP4 KLF5.csv")
+
+
+
+
+```
+
+
+```{r}
+df1<-read.csv("BPA.up.SP4 KLF5.csv", head=T)
+df2<-read.csv("BPS.up.SP4 KLF5.csv", head=T)
+df3<-read.csv("BPA.down.SP4 KLF5.csv", head=T)
+df4<-read.csv("BPS.down.SP4 KLF5.csv", head=T)
+
+merge <- merge(df1, df2, by="gene_name")
+write.csv(merge, "BPA.S.up.SP4 KLF5 merge.csv")
+
+merge <- merge(df3, df4, by="gene_name")
+write.csv(merge, "BPA.S.down.SP4 KLF5 merge.csv")
+
+
+```
+
+
+
+```{r}
+df2 <- read.csv("BPA.down.SP4 KLF5.csv", header = T)
+df3 <- read.csv("BPS.down.SP4 KLF5.csv", header = T)
+
+
+x <- list(
+  
+  
+ F1.BPA = as.matrix(df2[,2]),
+  F1.BPS = as.matrix(df3[,2])
+  
+ 
+   
+    )
+
+
+library(ggVennDiagram)
+library(ggvenn)
+library(ggplot2)
+
+ggvenn(
+  x, 
+  
+  stroke_size = 0.2, set_name_size = 4
+  )
+```
+
+
+```{r}
+# load Venn diagram package
+library("VennDiagram")
+  
+# move to new plotting page
+grid.newpage()
+  
+# create pairwise Venn diagram
+ #venn.plot <- draw.pairwise.venn(area1=71, area2=107,cross.area=38,category=c("BPA","BPS"),fill=c( "#CD534CFF","#FAFA33"), cex = 3, cat.cex = 3)
+#venn.plot <- draw.pairwise.venn(area1=71, area2=107,cross.area=38, fill=c( "#CD534CFF","#FAFA33"), cex = 3, cat.cex = 4)
+
+png(file="F1 klf5 sp4 targets overlap A and S up.png", width=4,height=2,units="in",res=1200)
+venn.plot <- draw.pairwise.venn(area1           = 998+2122,
+                                area2           = 371+2122,
+                                cross.area      = 2122,
+                                fill            = c("red","blue"),
+                                lty             = "blank",
+                                cex             = 3,
+                                cat.cex         = 2,
+                                cat.pos         = c(285, 105),
+                                cat.dist        = -0.02,
+                                cat.just        = list(c(-1, -1), c(1, 1)),
+                                
+                                ext.pos         = 30,
+                                ext.dist        = -0.1,
+                                ext.length      = 0.85,
+                                ext.line.lwd    = 0,
+                                ext.line.lty    = "dashed",
+                                rotation.degree = 0,
+                                offset = 0
+                               )
+
+
+```
+
+```{r}
+#GO analysis
+
+PsDEs <- read.csv("BPA.S.up.SP4 KLF5 merge.csv")
+FoldChangePsDEs <- PsDEs[,3]
+names(FoldChangePsDEs) <- as.character(PsDEs[,2])
+FoldChangePsDEs <- sort(FoldChangePsDEs, decreasing = TRUE)
+
+
+idPsDEs <- names(FoldChangePsDEs)
+PsDEs$ENTREZID <- convertIDs(idPsDEs, "SYMBOL","ENTREZID", org.Mm.eg.db)
+head(PsDEs, 4)
+  
+
+GOPsDEs <- enrichGO(PsDEs$ENTREZID,   
+                    
+                    OrgDb         = 'org.Mm.eg.db',
+                    ont           = "ALL",
+                    pAdjustMethod = "BH",
+                    pvalueCutoff  = 0.05,
+                    qvalueCutoff  = 0.05,
+                    readable      = TRUE)
+
+dim(GOPsDEs)
+
+
+write.csv(GOPsDEs, "F1.BPA.S.up.SP4 KLF5 merge.GO.csv")
+
+
+
+```
+
+
+```{r}
+a <- c("ribonucleoprotein complex biogenesis","histone modification","intrinsic apoptotic signaling pathway","DNA repair","mitotic cell cycle phase transition")
+
+p1 <- barplot(GOPsDEs, showCategory = a, font.size=8, x = "GeneRatio")+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color="black", size=6))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(legend.key.width = unit(0.2,"cm"))+theme(legend.key.height = unit(0.2,"cm"))+theme(legend.text = element_text(size = 6))+theme(legend.title = element_text(size = 6))+xlab("GeneRatio")+ggtitle("SP4 KLF5 potential targets")+theme(plot.title = element_text(size=10,face = "bold"))+theme(axis.title = element_text(size = 8))+theme(axis.text.x = element_text(angle = 30, size=6))
+
+
+ggsave("F1 SP4 KLF5.A.S.UP.genes overlap.tiff", width=3.2, height=2, dpi=300, p1)
+```
+
+
+
+

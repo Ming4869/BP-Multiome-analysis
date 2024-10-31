@@ -1,0 +1,57 @@
+
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(future)
+library(dplyr)
+```
+
+
+```{r}
+Germ <- readRDS("F1.Germ_2.rds")
+```
+
+
+
+```{r}
+#view germ cell cycle
+cell.cycle.genes = readLines(con = "/home/kanako/ownCloud/Hayashi_Lab_Shared/Liang.singleCELL/BPA.BPS/R.analysis/07.11.22.CellrangerAggrF1/Aggr.F1.Both.1and2set/R.6samples.old/Gene/CellCycle.analysis/cellCycleGenes.txt")
+s.features = cell.cycle.genes[1:49]
+g2m.features = cell.cycle.genes[50:105]
+
+F1.Germ <- CellCycleScoring(F1.Germ, s.features = s.features, g2m.features = g2m.features, set.ident = TRUE)
+```
+
+
+```{r}
+# Visualize the distribution of cell cycle markers across
+RidgePlot(F1.Germ, features = c("Pcna",  "Mki67"), group.by = "Germ.cluster.id", ncol = 2) 
+```
+
+```{r}
+head(F1.Germ[[]])
+
+
+FeaturePlot(F1.Germ, features = c("S.Score", "G2M.Score"), reduction ="wnn.umap2Germ", label.size = 30,min.cutoff = 0)
+
+DimPlot(F1.Germ, reduction = "wnn.umap2Germ", split.by = "treatment", pt.size = 0.5)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))+theme(legend.text = element_text(size = 8))
+
+ggsave("F1.germ.cellcycle_umap_treatment.tiff", dpi=300, width = 8, height = 3)
+```
+
+```{r}
+
+S_Cells <- subset (x = F1.Germ, S.Score>0, slot="data")
+G2M_Cells <- subset (x = F1.Germ, G2M.Score>0, slot="data")
+```
+
+```{r}
+table(S_Cells@meta.data$treatment) 
+table(G2M_Cells@meta.data$treatment) 
+table(F1.Germ@meta.data$treatment) 
+```
+
+
+
+

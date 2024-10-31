@@ -1,0 +1,163 @@
+
+
+```{r}
+readRDS("/home/kanako/ownCloud/Hayashi_Lab_Shared/Liang.singleCELL/BPA.BPS/R.analysis/07.11.22.CellrangerAggrF1/Aggr.F1.Both.1and2set/Final.R.Ming/F1.final.wnn.rds")
+```
+
+```{r}
+#extract germ cell subset
+Germ <- subset(F1.final.wnn, idents="Germ")
+
+saveRDS(Germ, "F1.Germ_1.rds")
+
+```
+
+
+```{r}
+Germ <- FindMultiModalNeighbors(
+object = Germ,
+reduction.list = list("harmony_rna", "harmony_peaks"),
+dims.list = list(1:45, 2:50),
+modality.weight.name = "RNA.weight",
+verbose = TRUE
+)
+
+
+Germ <- RunUMAP(
+object = Germ,
+nn.name = "weighted.nn",
+reduction.name = "wnn.umap2Germ",
+assay = "RNA",
+verbose = TRUE
+)
+
+Germ <- FindClusters(Germ, graph.name = 'wsnn', resolution = 0.4)    
+
+DimPlot(Germ, reduction = "wnn.umap2Germ", label = TRUE, pt.size = 0.4)
+
+
+```
+
+
+```{r}
+DimPlot_scCustom(Germ, reduction = "wnn.umap2Germ", label = FALSE, label.size = 4, pt.size = 0.5, repel = TRUE, colors_use = DiscretePalette_scCustomize(num_colors = 36, palette = "polychrome")) + FontSize(x.title = 8, y.title = 8) + Blank_Theme()
+ggsave("germ1clusterglasbeycolor.tiff")
+```
+
+
+```{r}
+VlnPlot(Germ, c('Id4',"Kit","Tspan8","Mki67","Etv5","Gfra1","Nanos3", "Lin28a","Sohlh1","Dmrtb1","Esx1","Upp1"))
+```
+
+```{r}
+VlnPlot(Germ1, c("Lhx1","Erbb3","Stra8","Zbtb16"), ncol=2)
+```
+
+```{r}
+
+DefaultAssay(F1.Germ)<-"RNA"
+Germcluster_markers <- FindAllMarkers(F1.Germ, test.use = "wilcox", only.pos = T)
+write.csv(Germcluster_markers, "F1.germ_cluster_markers.csv")
+```
+
+```{r}
+Idents(Germ)<-"seurat_clusters"
+levels(Germ)
+
+
+Germ.cluster.ids <- c("SSC2","SSC3","Progenitor2", "Diff1","Progenitor1","Diff2", "SSC1","Diff3")
+names(Germ.cluster.ids) <- levels(Germ)
+Germ <- RenameIdents(Germ, Germ.cluster.ids)
+
+levels(Germ)
+
+#add to metadata
+Germ[["Germ.cluster.id"]] <- Idents(object = Germ)
+
+```
+
+
+```{r}
+Idents(Germ)<-"Germ.cluster.id"
+levels(Germ)
+
+Germ$Germ.cluster.id <- factor(x = Germ$Germ.cluster.id, levels = c("SSC1","SSC2","SSC3","Progenitor1","Progenitor2", "Diff1","Diff2", "Diff3"))
+
+
+DimPlot(F1.Germ, reduction = "wnn.umap2Germ", label = T, label.size = 6, repel = TRUE, pt.size = 0.7)+ NoLegend()+Blank_Theme()+scale_color_manual(values =c('#ff9a36',"#F68282",'#31C53F','#D4D915','#1FA195','#B95FBB','#28CECA','#2FF18B'))
+ggsave("F1.Germ.final.cluster.tiff", dpi=300, width = 5, height = 4)
+```
+
+
+```{r}
+Germ@meta.data$treatment <-
+  ifelse(Germ@meta.data$replicate == "C1_1", "CON",
+   ifelse(Germ@meta.data$replicate == "C1_2", "CON",
+    ifelse(Germ@meta.data$replicate == "A1_1", "BPA",
+     ifelse(Germ@meta.data$replicate == "A1_2", "BPA","BPS"))))
+```
+
+
+```{r}
+Germ$treatment <- factor(x = Germ$treatment, levels = c("CON","BPA","BPS"))
+levels(Germ)
+
+DimPlot(F1.Germ, reduction = "wnn.umap2Germ", split.by = "treatment", cols=c("#F1A99A","#D6D0D1","#9CB8D3"), pt.size=0.5, label = FALSE) +FontSize(x.title = 10, y.title = 10)+theme(axis.text = element_text(size = 8))+theme(strip.text = element_text(size=8, face="bold"))+theme(plot.title =element_blank())+theme(legend.key.size = unit(0.5, 'cm'),legend.text = element_text(size=10))
+
+ggsave("F1.germ_umap_treatment_new1.tiff", dpi=300, width = 8, height = 3)
+```
+
+```{r}
+Idents(F1.Germ) <- "treatment"
+levels(F1.Germ)
+F1.con<-subset(F1.Germ, idents ="CON")
+F1.BPA<-subset(F1.Germ, idents ="BPA")
+F1.BPS<-subset(F1.Germ, idents ="BPS")
+```
+
+```{r}
+saveRDS(F1.con, "F1.Germ.CON.rds")
+saveRDS(F1.BPA, "F1.Germ.BPA.rds")
+saveRDS(F1.BPS, "F1.Germ.BPS.rds")
+```
+
+```{r}
+Idents(F1.Germ) <- "Germ.cluster.id"
+levels(F1.Germ)
+
+
+state1 <- c("stem","stem","stem","stem","progenitor","diff","diff","diff")
+names(state1) <- levels(F1.Germ)
+F1.Germ <- RenameIdents(F1.Germ, state1)
+
+levels(F1.Germ)
+
+#add to metadata
+F1.Germ[["state1"]] <- Idents(object = F1.Germ)
+```
+
+```{r}
+Idents(Germ) <- "state"
+DimPlot(Germ, reduction = "wnn.umap2Germ", label = T, label.size = 3, split.by = "treatment")+ NoLegend()
+```
+
+```{r}
+
+Idents(F1.Germ) <- "Germ.cluster.ids"
+F1.stem <- subset(F1.Germ, idents = c("SSC1","SSC2","SSC3","SSC4"))
+F1.diff <- subset(F1.Germ, idents = c("Diff1","Diff2","Diff3"))
+F1.Progenitor <- subset(F1.Germ, idents = c("Progenitor"))
+
+table(Germ@meta.data$treatment)
+table(F1.stem@meta.data$treatment)
+table(F1.diff@meta.data$treatment)
+table(F1.Progenitor@meta.data$treatment)
+
+```
+
+
+```{r}
+saveRDS(Germ, "F1.Germ_2.rds")
+```
+
+

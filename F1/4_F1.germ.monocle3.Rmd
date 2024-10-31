@@ -1,0 +1,206 @@
+
+
+```{r}
+Germ <- readRDS("/home/kanako/ownCloud/Hayashi_Lab_Shared/Liang.singleCELL/BPA.BPS/R.analysis/07.11.22.CellrangerAggrF1/Aggr.F1.Both.1and2set/Final.R.Ming/F1.germ.rds")
+```
+
+```{r}
+library(monocle3)
+library(Seurat)
+library(SeuratData)
+library(SeuratWrappers)
+library(ggplot2)
+library(patchwork)
+library(magrittr)
+```
+
+
+
+
+```{r}
+#####keep original UMAP
+##count =raw data, data=normalized data
+DefaultAssay(F1.Germ) <- "RNA"
+
+F1.germ_Diet <- DietSeurat(F1.Germ, counts=TRUE, data=TRUE, graph="wsnn", dimreducs = "wnn.umap2Germ")
+
+F1.germ_Diet[["UMAP"]] <- F1.germ_Diet[["wnn.umap2Germ"]]  ## If THE UMAP from seurat needs to be kept, it only accepts "UMAP' or "PCA" and others. As we want to use the WNN umap, we need to name it as "UMAP" to be processed in Monocle3.
+
+F1.germ.cds <- as.cell_data_set(F1.germ_Diet)
+F1.germ.cds <- cluster_cells(F1.germ.cds, reduction_method = "UMAP")
+
+#F1.germ.cds@clusters$UMAP$partitions[F1.germ.cds@clusters$UMAP$partitions == "2"] <- "1"
+F1.germ.cds <- learn_graph(F1.germ.cds,use_partition = T)
+
+F1.germ.cds <- order_cells(F1.germ.cds, reduction_method = "UMAP")
+
+plot_cells(cds = F1.germ.cds, label_cell_groups = FALSE, color_cells_by = "Germ.cluster.ids", show_trajectory_graph = TRUE, label_branch_points = FALSE, label_leaves = FALSE, label_roots = T,graph_label_size = 5, cell_size = 0.4)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))+theme(legend.text = element_text(size = 8))+scale_color_manual(values =c('#ff9a36',"#F68282",'#31C53F','#D4D915','#1FA195','#B95FBB','#28CECA','#2FF18B'))
+
+ggsave("F1.Germseudo.tiff", dpi=300, width = 5, height = 3)
+
+```
+
+
+
+```{r}
+F1.germ.cds <- order_cells(F1.germ.cds)
+plot_cells(F1.germ.cds,
+           graph_label_size = 5,
+           color_cells_by = "pseudotime",
+           group_cells_by = "cluster",
+           label_cell_groups = FALSE,
+           label_groups_by_cluster=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE,
+           label_roots = TRUE,
+           trajectory_graph_color = "black")+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=10))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 12))+theme(legend.text = element_text(size = 12))
+
+ggsave("F1.Germ.pseudotime1.tiff", dpi=300, width = 5, height = 3.5)
+```
+
+
+
+```{r}
+#pseudotime plot 
+F1.germ_1.cds <- estimate_size_factors(F1.germ_1.cds)
+F1.germ_1.cds@rowRanges@elementMetadata@listData[['gene_short_name']] <- rownames(F1.germ_1.cds[['RNA']])
+
+
+
+RP_genes.module <- c("Stra8","Gfra1","Kit","Id4")
+
+rowData(F1.germ_1.cds)$gene_name <- rownames(F1.germ_1.cds)
+rowData(F1.germ_1.cds)$gene_short_name <- rowData(F1.germ_1.cds)$gene_name
+
+
+RP_genes.module_cds1 <- F1.germ_1.cds[rowData(F1.germ_1.cds)$gene_short_name %in% RP_genes.module,label_by_short_name = FALSE]
+
+
+plot_genes_in_pseudotime(RP_genes.module_cds1)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+ theme(strip.text = element_text(size=8, face="bold.italic"))
+```
+
+
+
+```{r}
+F1.germ.cds$monocle3_pseudotime <- pseudotime(F1.germ.cds)
+
+data.pseudo <- as.data.frame(colData(F1.germ.cds))
+
+ggplot(data.pseudo, aes(monocle3_pseudotime, reorder(Germ.cluster.ids, monocle3_pseudotime), fill = Germ.cluster.ids, label=TRUE)) + geom_boxplot()+scale_fill_manual(values =c('#ff9a36',"#F68282",'#31C53F','#D4D915','#1FA195','#B95FBB','#28CECA','#2FF18B'))+ theme(text = element_text(size = 8, face="bold"))+theme(plot.title= element_blank())
+
+ggsave("pseudotimeclusterorder.tiff", dpi=300, width = 4.5, height = 3)
+```
+
+
+
+
+```{r}
+Genes.module <- c("Id4")
+
+rowData(F1.germ.cds)$gene_name <- rownames(F1.germ.cds)
+rowData(F1.germ.cds)$gene_short_name <- rowData(F1.germ.cds)$gene_name
+
+
+Genes.module_cds <- F1.germ.cds[rowData(F1.germ.cds)$gene_short_name %in% Genes.module,label_by_short_name = FALSE]
+
+
+plot_genes_in_pseudotime(Genes.module_cds, color_cells_by ="seurat_clusters", label_by_short_name=FALSE)+theme(axis.title = element_text(size=12))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+ theme(strip.text = element_text(size=8, face="bold.italic"))+scale_color_manual(values =c("#F68282",'#31C53F','#1FA195','#B95FBB','#D4D915','#28CECA','#ff9a36','#2FF18B'))+NoLegend()
+
+ggsave("Id4_pseduo.tiff", dpi=300, width = 4.5, height = 1.5)
+```
+
+
+
+
+
+
+
+
+```{r}
+####### compare between treatments
+```
+
+
+
+```{r}
+readRDS("F1.Germ.CON")
+readRDS("F1.Germ.BPA")
+readRDS("F1.Germ.BPS")
+```
+
+
+
+```{r}
+library(monocle3)
+library(SeuratWrappers)
+library(Seurat)
+library(ggplot2)
+
+DefaultAssay(F1.Germ.CON) <- "RNA"
+
+F1.con_Diet <- DietSeurat(F1.Germ.CON, counts=TRUE, data=TRUE, graph="wsnn", dimreducs = "wnn.umap2Germ")
+
+F1.con_Diet[["UMAP"]] <- F1.con_Diet[["wnn.umap2Germ"]]  ## If THE UMAP from seurat needs to be kept, it only accepts "UMAP' or "PCA" and others. As we want to use the WNN umap, we need to name it as "UMAP" to be processed in Monocle3.
+
+F1.con.cds <- as.cell_data_set(F1.con_Diet)
+F1.con.cds <- cluster_cells(F1.con.cds, reduction_method = "UMAP", cluster_method = 'louvain')
+#cluster_method = 'louvain'
+#F1.germ.cds@clusters$UMAP$partitions[F1.germ.cds@clusters$UMAP$partitions == "2"] <- "1"
+F1.con.cds <- learn_graph(F1.con.cds,use_partition = T)
+
+F1.con.cds <- order_cells(F1.con.cds, reduction_method = "UMAP")
+
+plot_cells(cds = F1.con.cds, label_cell_groups = FALSE, color_cells_by = "pseudotime",  show_trajectory_graph = TRUE, label_branch_points = FALSE, label_leaves = FALSE, label_roots = F,graph_label_size = 5, cell_size = 0.4)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))+theme(legend.text = element_text(size = 8))
+#scale_color_manual(values =c('#ff9a36',"#F68282",'#31C53F','#D4D915','#1FA195','#B95FBB','#28CECA','#2FF18B'))
+
+ggsave("F1.Germseudo.con3.tiff", dpi=300, width = 5, height = 3)
+
+
+```
+
+
+
+
+
+```{r}
+DefaultAssay(F1.Germ.BPA) <- "RNA"
+
+F1.BPA_Diet <- DietSeurat(F1.Germ.BPA, counts=TRUE, data=TRUE, graph="wsnn", dimreducs = "wnn.umap2Germ")
+
+F1.BPA_Diet[["UMAP"]] <- F1.BPA_Diet[["wnn.umap2Germ"]]  ## If THE UMAP from seurat needs to be kept, it only accepts "UMAP' or "PCA" and others. As we want to use the WNN umap, we need to name it as "UMAP" to be processed in Monocle3.
+
+F1.BPA.cds <- as.cell_data_set(F1.BPA_Diet)
+F1.BPA.cds <- cluster_cells(F1.BPA.cds, reduction_method = "UMAP",cluster_method = 'louvain')
+#cluster_method = 'louvain'
+#F1.germ.cds@clusters$UMAP$partitions[F1.germ.cds@clusters$UMAP$partitions == "2"] <- "1"
+F1.BPA.cds <- learn_graph(F1.BPA.cds,use_partition = T)
+
+F1.BPA.cds <- order_cells(F1.BPA.cds, reduction_method = "UMAP")
+
+plot_cells(cds = F1.BPA.cds, label_cell_groups = FALSE, color_cells_by = "pseudotime", show_trajectory_graph = TRUE,label_branch_points = FALSE, label_leaves = FALSE, label_roots = F,graph_label_size = 5, cell_size = 0.4)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))+theme(legend.text = element_text(size = 8))#scale_color_manual(values =c('#ff9a36',"#F68282",'#31C53F','#D4D915','#1FA195','#B95FBB','#28CECA','#2FF18B'))
+
+ggsave("F1.Germseudo.bpa3.tiff", dpi=300, width = 5, height = 3)
+```
+
+```{r}
+DefaultAssay(F1.Germ.BPS) <- "RNA"
+
+F1.BPS_Diet <- DietSeurat(F1.Germ.BPS, counts=TRUE, data=TRUE, graph="wsnn", dimreducs = "wnn.umap2Germ")
+
+F1.BPS_Diet[["UMAP"]] <- F1.BPS_Diet[["wnn.umap2Germ"]]  ## If THE UMAP from seurat needs to be kept, it only accepts "UMAP' or "PCA" and others. As we want to use the WNN umap, we need to name it as "UMAP" to be processed in Monocle3.
+
+F1.BPS.cds <- as.cell_data_set(F1.BPS_Diet)
+F1.BPS.cds <- cluster_cells(F1.BPS.cds, reduction_method = "UMAP",cluster_method = 'louvain')
+#cluster_method = 'louvain'
+#F1.germ.cds@clusters$UMAP$partitions[F1.germ.cds@clusters$UMAP$partitions == "2"] <- "1"
+F1.BPS.cds <- learn_graph(F1.BPS.cds,use_partition = T)
+
+F1.BPS.cds <- order_cells(F1.BPS.cds, reduction_method = "UMAP")
+
+plot_cells(cds = F1.BPS.cds, label_cell_groups = FALSE, color_cells_by = "pseudotime", show_trajectory_graph = TRUE, label_branch_points = FALSE, label_leaves = FALSE, label_roots = F,graph_label_size = 5, cell_size = 0.4)+theme(axis.title = element_text(size=8))+theme(axis.text = element_text(color='black', size=8))+theme(legend.title = element_text(size=8)+theme(legend.text = element_text(size = 8)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.title = element_text(size = 8))+theme(legend.text = element_text(size = 8))#scale_color_manual(values =c('#ff9a36',"#F68282",'#31C53F','#D4D915','#1FA195','#B95FBB','#28CECA','#2FF18B'))
+
+ggsave("F1.Germseudo.BPS3.tiff", dpi=300, width = 5, height = 3)
+```
+
+
+
