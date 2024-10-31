@@ -1,0 +1,236 @@
+
+
+```{r}
+library(Seurat)
+library(Signac)
+library(EnsDb.Mmusculus.v79)    
+library(BSgenome.Mmusculus.UCSC.mm10)
+library(ggplot2)
+library(future)
+set.seed(1234)
+library(dplyr)
+library(hdf5r)
+```
+
+
+
+```{r}
+DefaultAssay(F2.Germ)<-"ATAC"
+```
+
+
+```{r}
+#1 Find the positions of each promoter
+
+library(EnsDb.Mmusculus.v79)
+
+gene.ranges <- genes(EnsDb.Mmusculus.v79)
+gene.ranges <- gene.ranges[gene.ranges$gene_biotype == 'protein_coding', ]
+gene.ranges <- keepStandardChromosomes(gene.ranges, pruning.mode = 'coarse')
+seqlevelsStyle(gene.ranges) <- 'UCSC'
+gene.promoters <- promoters(gene.ranges)
+```
+
+
+
+```{r}
+#2 Find which promoters overlap a peak
+
+library(GenomicRanges)
+library(S4Vectors)
+
+peaks <- StringToGRanges(regions = rownames(F2.Germ), sep = c(":", "-"))
+hits <- findOverlaps(query = peaks, subject = gene.promoters)
+promoter.peaks <- queryHits(hits)
+write.csv(promoter.peaks, "promoter.peaks.csv")
+```
+
+
+
+```{r}
+#3 Find which promoter peaks contain the motif
+
+promoter.peaks <- read.csv("promoter.peaks.csv")
+promoter.peaks <- promoter.peaks[,2]
+df <-read.csv("F2.BPA.CON.diff_Motif_activity.combined.csv")
+
+motif.use <- c(df[,2])
+
+promoter.peaks.with.motif <- GetMotifData(object = F2.Germ)[promoter.peaks, motif.use]
+
+write.csv(promoter.peaks.with.motif, "peak_motif.BPA_overlap.csv")
+
+
+df <-read.csv("F2.BPS.CON.diff_Motif_activity.combined.csv")
+
+motif.use <- c(df[,2])
+
+promoter.peaks.with.motif <- GetMotifData(object = F2.Germ)[promoter.peaks, motif.use]
+
+write.csv(promoter.peaks.with.motif, "peak_motif.BPS_overlap.csv")
+```
+
+
+
+
+```{r}
+ATAC.peaks <- ClosestFeature(
+  object = F2.Germ,
+  regions = peaks
+)
+write.csv(ATAC.peaks, "F2.Germ.peaks.total.closestfeature.csv")
+```
+
+
+
+```{r}
+# promoter peaks annotation
+# add a new column to "F2.Germ.peaks.total.closestfeature.csv", head="x", content=number order, see the file.
+
+
+
+df1<-read.csv("promoter.peaks.csv", head=T)
+df2<-read.csv("F2.Germ.peaks.total.closestfeature.csv", head=T)
+
+
+promoter.peak.anno <- merge(x=df1, y=df2, by="x")
+
+#remove rows with na
+
+#BPA.S.overlap <- BPA.S.overlap[complete.cases(BPA.S.overlap), ] 
+
+#keep only has na
+#BPA.S.overlap <- combine_list[is.na(BPA.S.overlap$pct.1.y), ]
+
+
+write.csv(promoter.peak.anno, "promoter.peak.anno.csv")
+#copy "query_region" column to "peak_motif.BPA_overlap.csv", and "peak_motif.BPS_overlap.csv"
+
+```
+
+
+
+```{r}
+#Combine with DAR
+df3<-read.csv("peak_motif.BPA_overlap.csv", head=T)
+df4<-read.csv("F2.BPA.CON.DAR.csv", head=T)
+
+
+BPA.overlap <- merge(x=df4, y=df3, by="query_region")
+write.csv(BPA.overlap, "BPA.diff_motif_promoter_anno_DAR.csv")
+
+
+df3<-read.csv("peak_motif.BPS_overlap.csv", head=T)
+df4<-read.csv("F2.BPS.CON.DAR.csv", head=T)
+
+
+BPS.overlap <- merge(x=df4, y=df3, by="query_region")
+write.csv(BPS.overlap, "BPS.diff_motif_promoter_anno_DAR.csv")
+```
+
+
+
+```{r}
+#select FC>=2, plot heatmap for TF motif activity and TF gene expression
+
+library(ggplot2)
+library(dplyr)
+#load the genes that I want to use
+df <- read.csv("TF fold 2.csv")
+df4 <- df[,3]
+df5 <- df[,1]
+df6 <- df[,2]
+df1 <- AverageExpression(
+  F2.Germ,
+  assays = "RNA",
+  features = df4,
+  return.seurat = FALSE,
+  group.by = "Treatment",
+  add.ident = NULL,
+  slot = "data",
+  verbose = TRUE
+)
+
+write.csv(df1, "heatmap_TFgene.csv")
+
+
+df2 <- AverageExpression(
+  F2.Germ,
+  assays = "chromvar",
+  features = df5,
+  return.seurat = FALSE,
+  group.by = "Treatment",
+  add.ident = NULL,
+  slot = "data",
+  verbose = TRUE
+)
+
+write.csv(df2, "heatmap_TFgene.motif.csv")
+```
+
+
+```{r}
+ df2 <- read.csv("heatmap_TFgene.csv")
+ myCol <- colorRampPalette(c("blue", "white", "red"))(256)
+ 
+ rownames(df2) <- df2$Gene
+gsn <- grep("Gene", colnames(df2))
+df2 <- df2[,-gsn]
+
+
+
+group_df = data.frame(Groups=as.factor(c("CON", "BPA","BPS")))
+rownames(group_df) <- colnames(df2)
+ann_colors = list(
+  Groups = c(CON="#98AFC7", BPA="#F8766D",BPS="#FDBD01"))
+
+
+library(RColorBrewer)
+library(circlize)
+
+
+
+png(file="F2.heatmap.TF.genes.png", width=3,height=3.0,units="in",res=1200)
+
+library("pheatmap")
+my_heatmap<-pheatmap(as.matrix(df2), scale="row", color = colorRampPalette(brewer.pal(5, "GnBu"))(50), 
+          border_color = NA, annotation_col = group_df, annotation_colors = ann_colors, cluster_rows= FALSE, cluster_cols = FALSE, cellwidth=40, cellheight=8, show_colnames = F, angle_col = c("0"), annotation_legend=F, fontsize_row = 8,  legend_labels = c("-2","-1","0","1","2"), name =  "GE",fontsize = 3 )
+
+save_pheatmap_png <- function(x, filename, width=1500, height=3000, res = 300) {
+  png(filename, width = width, height = 1500, res = res)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+save_pheatmap_png(my_heatmap, "heatmap.TF.genes.png")
+draw(my_heatmap)
+ dev.off()
+```
+
+```{r}
+df3 <- read.csv("heatmap_TFgene.motif.csv")
+ 
+ 
+ rownames(df3) <- df3$motif
+gsn <- grep("motif", colnames(df3))
+df3 <- df3[,-gsn]
+
+
+
+group_df = data.frame(Groups=as.factor(c("CON", "BPA","BPS")))
+rownames(group_df) <- colnames(df3)
+ann_colors = list(
+  Groups = c(CON="#98AFC7", BPA="#F8766D",BPS="#FDBD01"))
+
+
+png(file="heatmap.TF.motif.activity.png", width=3,height=3.0,units="in",res=1200)
+
+library("pheatmap")
+my_heatmap<-pheatmap(as.matrix(df3), scale="row", color = colorRampPalette(brewer.pal(5, "GnBu"))(50), border_color = NA, annotation_col = group_df, annotation_colors = ann_colors, cluster_rows= FALSE, cluster_cols = FALSE, cellwidth=40, cellheight=8, show_colnames = F, angle_col = c("0"), annotation_legend=F, fontsize_row = 8,  legend_labels = c("-2","-1","0","1","2"), name =  "TF",fontsize = 3 )
+save_pheatmap_png(my_heatmap, "heatmap.TF.motif.activity.png")
+
+draw(my_heatmap)
+ dev.off()
+
+```
+
