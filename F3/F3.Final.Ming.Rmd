@@ -1,1 +1,326 @@
+```{r}
+library(Seurat)
+library(Signac)
+library(EnsDb.Mmusculus.v79)    
+library(BSgenome.Mmusculus.UCSC.mm10)
+library(ggplot2)
+library(future)
+set.seed(1234)
+library(dplyr)
+library(hdf5r)
+```
+
+
+
+```{r}
+# C3, A3, S3 samples were processed with cellrangerAggr first to normalize their depth.
+
+F3.counts <- Read10X_h5("/home/kanako/ownCloud/Hayashi_Lab_Shared/Liang.singleCELL/BPA.BPS/R.analysis/10.03.22.CellrangerAggrF3/cellranger/F3/outs/filtered_feature_bc_matrix.h5")
+
+F3.fragpath <- "/home/kanako/ownCloud/Hayashi_Lab_Shared/Liang.singleCELL/BPA.BPS/R.analysis/10.03.22.CellrangerAggrF3/cellranger/F3/outs/atac_fragments.tsv.gz"
+
+annotation <- GetGRangesFromEnsDb(ensdb = EnsDb.Mmusculus.v79)
+seqlevelsStyle(annotation) <- "UCSC"
+genome(annotation) <- "mm10"
+
+Annotation(F3) <- annotation
+
+# create a Seurat object containing the RNA adata
+F3 <- CreateSeuratObject(
+  counts = F3.counts$`Gene Expression`,
+  assay = "RNA",
+  strip.suffix = TRUE,
+  names.field = 2, names.delim = "-"
+)
+
+# create ATAC assay and add it to the object
+F3[["ATAC"]] <- CreateChromatinAssay(
+  counts = F3.counts$Peaks,
+  sep = c(":", "-"),
+  fragments = F3.fragpath,
+  annotation = annotation
+)
+```
+
+```{r}
+DefaultAssay(F3) <- "ATAC"
+F3 <- NucleosomeSignal(F3)
+F3 <- TSSEnrichment(F3)
+
+
+#Note!!! For the calculation of blacklist_fraction, the assay of "ATAC' from cellranger should be used. If the "peaks" from MACS2 were used, the values for each cell will be all zero.
+F3$blacklist_fraction <- FractionCountsInRegion(
+  object = F3, 
+  assay = 'ATAC',
+  regions = blacklist_mm10
+)
+
+# nCount_peaks/nFeature_ATAC is similar to peak_region_fragments from cellranger.https://github.com/timoast/signac/issues/19
+# nCount_ATAC is similar to atac_fragements, I guess?
+F3$pct_reads_in_peaks <- F3$nFeature_ATAC / F3$nCount_ATAC * 100
+
+
+DefaultAssay(F3) <- "RNA"
+#some mitochondiral genes can be found within the nucleus
+F3[["percent.mt"]] <- PercentageFeatureSet(F3, pattern = "^mt-")
+
+VlnPlot(
+  object = F3,
+  features = c("pct_reads_in_peaks", "TSS.enrichment", "nucleosome_signal","blacklist_fraction","nCount_RNA", "nCount_ATAC","percent.mt", "nFeature_ATAC"),
+  ncol = 4,
+  pt.size = 0
+)
+```
+```{r}
+FeatureScatter(F3, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+FeatureScatter(F3, feature1 = "nCount_ATAC", feature2 = "nFeature_ATAC")
+```
+
+```{r}
+Idents(F3) <- "orig.ident"
+
+levels(F3)
+
+table(F3@meta.data$orig.ident)
+
+
+F3 <- RenameIdents(F3, '1' = 'C3', '2' = 'A3','3'='S3')
+levels(F3)
+
+F3[["Treatment"]] <- Idents(object = F3)
+
+```
+
+
+
+```{r}
+saveRDS(F3_1, "F3.QC.rds")
+```
+
+
+
+
+```{r}
+F3_1 <- readRDS("F3.QC.rds")
+F3_1 <- subset(
+  x = F3_1,
+  subset = nCount_ATAC < 200000 &
+    blacklist_fraction < 0.1 &
+    nCount_RNA < 50000 &
+    nFeature_ATAC > 1000 &
+    nFeature_ATAC < 100000 &
+    nFeature_RNA > 1000 &
+    nucleosome_signal < 2.5 &
+        TSS.enrichment > 1 &
+    percent.mt < 40
+)
+F3_1
+```
+
+
+
+
+```{r}
+table(F3_1@meta.data$Treatment) 
+```
+
+```{r}
+
+DefaultAssay(F3_1) <- "RNA"
+
+library(harmony)
+
+DefaultAssay(F3_1) <- "RNA"
+F3_1 <- NormalizeData(F3_1, normalization.method = "LogNormalize", scale.factor = 10000)
+F3_1 <- FindVariableFeatures(F3_1, selection.method = "vst", nfeatures = 2000)
+
+F3_1 <- ScaleData(F3_1, verbose = FALSE)
+F3_1 <- RunPCA(F3_1, npcs = 50, verbose = FALSE) 
+ElbowPlot(F3_1, ndims = 50, reduction = "pca")
+
+F3_1 <- JackStraw(F3_1, num.replicate = 50, dims = 50)
+F3_1 <- ScoreJackStraw(F3_1, dims = 1:50)
+JackStrawPlot(F3_1, dims = 21:50)  #select 50
+
+
+```
+
+
+
+```{r}
+F3_2 <- RunHarmony(
+object = F3_1,
+group.by.vars = 'orig.ident',
+reduction = 'pca',
+assay.use = 'RNA',
+project.dim = FALSE,
+reduction.save = "harmony_rna"
+)
+
+F3_2 <- RunUMAP(F3_2, reduction = "harmony_rna", dims = 1:42)  ## generate UMAP based on harmony_rna
+
+DimPlot(F3_2, reduction = "umap", split.by = "orig.ident")
+DimPlot(F3_2, reduction = "umap", label = TRUE, repel = TRUE)
+
+```
+
+
+```{r}
+F3_2 <- FindNeighbors(F3_2, reduction = "harmony_rna", dims = 1:42)
+F3_2 <- FindClusters(F3_2, resolution = 0.01) 
+
+F3_2 <- RunUMAP(F3_2, reduction = "harmony_rna", dims = 1:42)  ## generate UMAP based on harmony_rna
+
+DimPlot(F3_2, reduction = "umap", split.by = "orig.ident")
+DimPlot(F3_2, reduction = "umap", label = TRUE, repel = TRUE)
+
+
+```
+
+```{r}
+DefaultAssay(F3_2) <- "ATAC"
+
+F3_2 <- RunTFIDF(F3_2)
+F3_2 <- FindTopFeatures(F3_2, min.cutoff = 'q0')
+F3_2 <- RunSVD(F3_2)
+
+DepthCor(F3_2)
+
+F3_2 <-  RunHarmony(
+object = F3_2,
+group.by.vars = 'orig.ident',
+reduction = 'lsi',
+assay.use = 'ATAC',
+project.dim = FALSE,
+reduction.save = "harmony_ATAC"
+)
+
+F3_2 <- RunUMAP(F3_2, reduction = 'harmony_ATAC', dims = 6:50, reduction.name = "umap.ATAC", reduction.key = "atacUMAP_")
+
+DimPlot(F3_2, reduction = "umap.ATAC", split.by = "orig.ident")
+DimPlot(F3_2, reduction = "umap.ATAC", label = TRUE, repel = TRUE)
+```
+
+```{r}
+F3_2 <- FindMultiModalNeighbors(
+object =F3_2,
+reduction.list = list("harmony_rna", "harmony_ATAC"),
+dims.list = list(1:42, 6:50),
+modality.weight.name = "RNA.weight",
+verbose = TRUE
+)
+
+F3_2 <- RunUMAP(
+object = F3_2,
+nn.name = "weighted.nn",
+reduction.name = "wnn.umap",
+assay = "RNA",
+verbose = TRUE
+)
+
+F3_2 <- FindClusters(F3_2, graph.name = 'wsnn', resolution = 0.15)  ## #select 0.001- 0.015
+library(scCustomize)
+DimPlot_scCustom(F3_2, reduction = "wnn.umap")
+```
+
+
+
+```{r}
+library(DoubletFinder)
+
+DefaultAssay(F3_2) <- "RNA"
+nExp <- round(ncol(F3_2) * 0.04)  # expect 4% doublets
+data.filt <- doubletFinder_v3(F3_2, pN = 0.25, pK = 0.09, nExp = nExp, PCs = 1:42)
+
+
+
+DF.name = colnames(data.filt@meta.data)[grepl("DF.classification", colnames(data.filt@meta.data))]
+
+
+cowplot::plot_grid(ncol = 2, DimPlot(data.filt, group.by = "seurat_clusters", reduction = "wnn.umap") + NoAxes(),
+    DimPlot(data.filt, group.by = DF.name, reduction = "wnn.umap") + NoAxes())
+```
+
+
+
+
+```{r}
+data.filt = data.filt[, data.filt@meta.data[, DF.name] == "Singlet"]
+dim(data.filt)
+```
+
+
+
+
+
+
+```{r}
+F3.final.wnn <- data.filt
+
+
+DimPlot_scCustom(F3.final.wnn, reduction = "wnn.umap")
+```
+
+
+
+
+```{r}
+DefaultAssay(F3.final.wnn) <- "RNA"
+FeaturePlot(F3.final.wnn, c("Sox9","Ddx4","Rgs5","Pecam1","Adgre1","Amh","Acta2","Cyp17a1","Cyp11a1","Inhba","Pdgfra","Il7r"), reduction = "wnn.umap")
+```
+
+
+
+
+```{r}
+new.cluster.ids <- c("Germ","Immature Leydig","Sertoli","Germ","Pericyte", "Myoid","Sertoli","Immature Leydig","Endothelial","Lymphocyte","Myoid","Leydig","Macrophage")
+names(new.cluster.ids) <- levels(F3.final.wnn)
+F3.final.wnn <- RenameIdents(F3.final.wnn, new.cluster.ids)
+
+levels(F3.final.wnn)
+
+#add to metadata
+F3.final.wnn[["renamed.cluster.id"]] <- Idents(object = F3.final.wnn)
+
+```
+```{r}
+Idents(F3.final.wnn) <-"seurat_clusters"
+levels(F3.final.wnn)
+
+new.cluster.ids <- c("Germ","Stroma","Sertoli","Germ","Pericyte", "Myoid","Sertoli","Stroma","Endothelial","Innate Lymph","Myoid","Leydig","Macrophage")
+names(new.cluster.ids) <- levels(F3.final.wnn)
+F3.final.wnn <- RenameIdents(F3.final.wnn, new.cluster.ids)
+
+levels(F3.final.wnn)
+
+#add to metadata
+F3.final.wnn[["renamed.cluster.id"]] <- Idents(object = F3.final.wnn)
+```
+
+```{r}
+levels(F3.final.wnn)
+Idents(F3.final.wnn) <-"renamed.cluster.id" 
+
+DimPlot(F3.final.wnn, reduction = "wnn.umap", pt.size = 0.3)
+```
+
+```{r}
+library(scCustomize)
+DimPlot(F3.final.wnn, reduction = "wnn.umap", group.by = "renamed.cluster.id", label = TRUE, label.size = 5, repel = TRUE) + FontSize(x.title = 12, y.title = 12)+theme(axis.text = element_text(size = 8))+theme(strip.text = element_text(size=8, face="bold"))+NoLegend()+Blank_Theme()
+
+ggsave("F3.UMAP.harmony.WNN.cluster.tiff", dpi=300,width = 5, height = 4)
+
+DimPlot(F3.final.wnn, reduction = "wnn.umap", split.by = "Treatment", label = FALSE, label.size = 4, repel = TRUE) +FontSize(x.title = 8, y.title = 8)+theme(axis.text = element_text(size = 8))+theme(strip.text = element_text(size=8, face="bold"))+ggtitle("WNN")+NoLegend()
+
+ggsave("F3.UMAP.harmony.WNN.Treatment.tiff",  dpi=300, width = 5, height = 2.5)
+```
+
+```{r}
+saveRDS(F3.final.wnn, "F3.final.wnn.rds")
+```
+
+
+
+
 
