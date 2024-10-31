@@ -1,0 +1,108 @@
+
+
+```{r}
+#Find overlap enriched high activity TF in BPA and BPS groups in each generation
+
+df1<-read.csv("F1-F3 BPA TF.csv", head=T)
+df2<-read.csv("F1-F3 BPS TF.csv", head=T)
+
+
+BPA.S.overlap.F1 <- merge(x=df1, y=df2, by="F3.motif")
+write.csv(BPA.S.overlap.F1, "BPA.S.F1.overlap.TF.csv")
+
+
+
+
+```
+
+
+
+
+
+
+```{r}
+library(Signac)
+library(Seurat)
+DefaultAssay(F1.Germ)<-"chromvar"
+Idents(F1.Germ)<-"treatment"
+levels(F1.Germ)
+
+
+#plot F1 motif 
+df<-read.csv("BPA.S.F1-F3.overlap.TF.csv")
+df1<-df[,1]
+df2<-df[,2]
+df3<-df[,3]
+library(scCustomize)
+library(RColorBrewer)
+DotPlot_scCustom(F1.Germ, features = df1, x_lab_rotate = TRUE, flip_axes = F, dot.scale = 5, colors_use = colorRampPalette(c("#87cefa", "lightgrey", "#dc143c"))(256)) + xlab('Treatment') +  ylab('Motif')+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=7))+theme(legend.key.size = unit(0.15, 'cm'))+theme(legend.title = element_text(size = 5))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 5))+ scale_x_discrete(labels=df2)
+ggsave("F1.Germ.TF.dotplot.tiff", dpi = 300, width = 6.5, height = 1.8, bg="white")
+
+DefaultAssay(F1.Germ)<-"RNA"
+DotPlot_scCustom(F1.Germ, features = df3, x_lab_rotate = TRUE, flip_axes = F, dot.scale = 5) + xlab('Treatment') +  ylab('Motif')+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=7))+theme(legend.key.size = unit(0.15, 'cm'))+theme(legend.title = element_text(size = 5))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 5))
+ggsave("F1.Germ.TF.genes.dotplot.tiff", dpi = 300, width = 6.5, height = 1.8, bg="white")
+
+DotPlot_scCustom(F1.Germ, features = df1, x_lab_rotate = TRUE, flip_axes = F, dot.scale = 5) + xlab('Treatment') +  ylab('Motif')+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=7))+theme(legend.key.size = unit(0.15, 'cm'))+theme(legend.title = element_text(size = 5))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 5))+ scale_x_discrete(labels=df2)
+ggsave("F1.Germ.TF.dotplot1.tiff", dpi = 300, width = 6.5, height = 1.8, bg="white")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+#plot F2 motif 
+
+DefaultAssay(F2.Germ)<-"chromvar"
+Idents(F2.Germ)<-"Treatment"
+levels(F2.Germ)
+df<-read.csv("BPA.S.F1-F3.overlap.TF.csv")
+df1<-df[,7]
+df2<-df[,8]
+df3<-df[,9]
+library(scCustomize)
+library(RColorBrewer)
+DotPlot_scCustom(F2.Germ, features = df1, x_lab_rotate = TRUE, flip_axes = F, dot.scale = 5, colors_use = colorRampPalette(c("#87cefa", "lightgrey", "#dc143c"))(256)) + xlab('Treatment') +  ylab('Motif')+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=7))+theme(legend.key.size = unit(0.15, 'cm'))+theme(legend.title = element_text(size = 5))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 5))+ scale_x_discrete(labels=df2)+ scale_y_discrete(labels=c("CON","BPA","BPS"))
+ggsave("F2.Germ.TF.dotplot.tiff", dpi = 300, width = 10, height = 2.2, bg="white")
+
+DefaultAssay(F2.Germ)<-"RNA"
+DotPlot_scCustom(F2.Germ, features = df3, x_lab_rotate = TRUE, flip_axes = F, dot.scale = 5) + xlab('Treatment') +  ylab('Motif')+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=7))+theme(legend.key.size = unit(0.15, 'cm'))+theme(legend.title = element_text(size = 5))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 5))+ scale_y_discrete(labels=c("CON","BPA","BPS"))
+ggsave("F2.Germ.TF.genes.dotplot.tiff", dpi = 300, width = 10, height = 1.8, bg="white")
+
+
+```
+```{r}
+
+DefaultAssay(F3.Germ)<-"chromvar"
+Idents(F3.Germ)<-"Treatment"
+levels(F3.Germ)
+
+df<-read.csv("BPA.S.F1-F3.overlap.TF.csv")
+df1<-df[,13]
+df2<-df[,14]
+df3<-df[,15]
+library(scCustomize)
+library(RColorBrewer)
+DotPlot_scCustom(F3.Germ, features = df1, x_lab_rotate = TRUE, flip_axes = F, dot.scale = 5, colors_use = colorRampPalette(c("#87cefa", "lightgrey", "#dc143c"))(256)) + xlab('Treatment') +  ylab('Motif')+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=7))+theme(legend.key.size = unit(0.1, 'cm'))+theme(legend.title = element_text(size = 4))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 4))+ scale_x_discrete(labels=df2)+ scale_y_discrete(labels=c("CON","BPA","BPS"))
+ggsave("F3.Germ.TF.dotplot.tiff", dpi = 300, width = 2.5, height = 1.8, bg="white")
+
+
+DefaultAssay(F3.Germ)<-"RNA"
+DotPlot_scCustom(F3.Germ, features = df3, x_lab_rotate = TRUE, flip_axes = F, dot.scale = 5) + xlab('Treatment') +  ylab('Motif')+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=7))+theme(legend.key.size = unit(0.15, 'cm'))+theme(legend.title = element_text(size = 5))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 5))+ scale_y_discrete(labels=c("CON","BPA","BPS"))
+ggsave("F3.Germ.TF.genes.dotplot.tiff", dpi = 300, width = 2.5, height = 1.8, bg="white")
+
+
+```
+
