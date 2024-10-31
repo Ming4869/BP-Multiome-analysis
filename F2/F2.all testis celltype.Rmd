@@ -1,0 +1,329 @@
+
+```{r}
+library(Seurat)
+library(Signac)
+library(EnsDb.Mmusculus.v79)    
+library(BSgenome.Mmusculus.UCSC.mm10)
+library(ggplot2)
+library(future)
+set.seed(1234)
+library(dplyr)
+library(hdf5r)
+
+# C2, A2, S2 samples were processed with cellrangerAggr first to normalize their depth.
+
+F2.counts <- Read10X_h5("/home/kanako/ownCloud/Hayashi_Lab_Shared/Liang.singleCELL/BPA.BPS/R.analysis/10.03.22.CellrangerAggrF2/cellranger/F2/outs/filtered_feature_bc_matrix.h5")
+
+F2.fragpath <- "/home/kanako/ownCloud/Hayashi_Lab_Shared/Liang.singleCELL/BPA.BPS/R.analysis/10.03.22.CellrangerAggrF2/cellranger/F2/outs/atac_fragments.tsv.gz"
+
+
+annotation <- GetGRangesFromEnsDb(ensdb = EnsDb.Mmusculus.v79)
+seqlevelsStyle(annotation) <- "UCSC"
+genome(annotation) <- "mm10"
+
+
+# create a Seurat object containing the RNA data
+F2 <- CreateSeuratObject(
+  counts = F2.counts$`Gene Expression`,
+  assay = "RNA",
+  strip.suffix = TRUE,
+  names.field = 2, names.delim = "-"
+)
+
+# create ATAC assay and add it to the object
+F2[["ATAC"]] <- CreateChromatinAssay(
+  counts = F2.counts$Peaks,
+  sep = c(":", "-"),
+  fragments = F2.fragpath,
+  annotation = annotation
+)
+
+```
+
+
+
+```{r}
+DefaultAssay(F2) <- "ATAC"
+
+F2 <- NucleosomeSignal(F2)
+F2 <- TSSEnrichment(F2)
+
+
+F2$blacklist_fraction <- FractionCountsInRegion(
+  object = F2, 
+  assay = 'ATAC',
+  regions = blacklist_mm10)
+  
+F2$pct_reads_in_peaks <- F2$nFeature_ATAC / F2$nCount_ATAC * 100  
+  
+  
+  
+```
+
+```{r}
+DefaultAssay(F2) <- "RNA"
+F2[["percent.mt"]] <- PercentageFeatureSet(F2, pattern = "^mt-")
+
+VlnPlot(
+  object = F2,
+  features = c("pct_reads_in_peaks","nCount_peaks", "TSS.enrichment", "nucleosome_signal","blacklist_fraction","nCount_RNA", "nCount_ATAC","percent.mt"),
+  ncol = 3,
+  pt.size = 0
+)
+
+FeatureScatter(F2, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+FeatureScatter(F2, feature1 = "nCount_ATAC", feature2 = "nFeature_ATAC")
+```
+
+
+
+```{r}
+Idents(F2) <- "orig.ident"
+
+levels(F2)
+
+table(F2@meta.data$orig.ident)
+```
+
+```{r}
+F2 <- RenameIdents(F2, '1' = 'C2', '2' = 'A2','3'='S2')
+levels(F2)
+
+F2[["Treatment"]] <- Idents(object = F2)
+```
+
+
+
+```{r}
+F2 <- subset(
+  x = F2,
+  subset = nCount_ATAC < 200000 &
+        blacklist_fraction < 0.2 &
+    nCount_RNA < 75000 &
+    nFeature_ATAC > 1000 &
+    nFeature_RNA > 1000 &
+    nucleosome_signal < 2.0 &
+    TSS.enrichment > 1
+)
+F2   ##6011 reduced to 5334
+```
+```{r}
+#F2 Saved after quality control
+saveRDS(F2, "F2.rds")
+```
+
+
+
+```{r}
+table(F2@meta.data$Treatment) 
+```
+
+```{r}
+
+DefaultAssay(F2) <- "RNA"
+F2 <- NormalizeData(F2, normalization.method = "LogNormalize", scale.factor = 10000)
+F2 <- FindVariableFeatures(F2, selection.method = "vst", nfeatures = 2000)
+
+F2 <- ScaleData(F2, verbose = FALSE)
+F2 <- RunPCA(F2, npcs = 50, verbose = FALSE) 
+
+F2 <- JackStraw(F2, num.replicate = 50, dims = 50)
+F2 <- ScoreJackStraw(F2, dims = 1:50)
+JackStrawPlot(F2, dims = 21:40)   ##select 35
+```
+
+
+```{r}
+#set F2_1 with harmony 
+library(harmony)
+
+F2_1 <- RunHarmony(
+object = F2,
+group.by.vars = 'orig.ident',
+reduction = 'pca',
+assay.use = 'RNA',
+project.dim = FALSE,
+reduction.save = "harmony_rna"
+)
+
+F2_2 <- FindNeighbors(F2_1, reduction = "harmony_rna",reduction.name = "umap_rna", dims = 1:32)
+F2_2 <- FindClusters(F2_2, resolution = 0.02) 
+
+F2_2 <- RunUMAP(F2_2, reduction = "harmony_rna", dims = 1:32)  ## generate UMAP based on harmony_rna
+
+DimPlot(F2_2, reduction = "umap", split.by = "Treatment")
+DimPlot(F2_2, reduction = "umap", label = TRUE, repel = TRUE)
+
+```
+
+
+
+
+
+
+
+```{r}
+# Sertoli cell markers
+DefaultAssay(F2.final) <- "RNA"
+VlnPlot(F2.final, c("Sox9","Rhox8",'Aard',"Amhr2","Clu","Ctsl"))   
+#cluster2 are Sertoli cells
+```
+
+```{r}
+DefaultAssay(F2_2) <- "ATAC"
+
+F2.final.ATAC <- RunTFIDF(F2_2)
+F2.final.ATAC <- FindTopFeatures(F2.final.ATAC, min.cutoff = 'q0')
+F2.final.ATAC <- RunSVD(F2.final.ATAC)
+
+DepthCor(F2.final.ATAC)
+#select dims 2:50
+```
+
+```{r}
+F2.final.ATAC <-  RunHarmony(
+object = F2.final.ATAC,
+group.by.vars = 'orig.ident',
+reduction = 'lsi',
+assay.use = 'ATAC',
+project.dim = FALSE,
+reduction.save = "harmony_peaks"
+)
+
+F2.final.ATAC <- RunUMAP(F2.final.ATAC, reduction = 'harmony_peaks', dims = 2:50, reduction.name = "umap.peaks", reduction.key = "peaksUMAP_")
+
+DimPlot(F2.final.ATAC, reduction = "umap.peaks", split.by = "Treatment")
+DimPlot(F2.final.ATAC, reduction = "umap.peaks", label = TRUE, repel = TRUE)
+```
+
+
+```{r}
+F2.final.wnn <- FindMultiModalNeighbors(
+object = F2.final.ATAC,
+reduction.list = list("harmony_rna", "harmony_peaks"),
+dims.list = list(1:32, 2:50),
+modality.weight.name = "RNA.weight",
+verbose = TRUE
+)
+
+F2.final.wnn <- RunUMAP(
+object = F2.final.wnn,
+nn.name = "weighted.nn",
+reduction.name = "wnn.umap",
+assay = "RNA",
+verbose = TRUE
+)
+
+F2.final.wnn <- FindClusters(F2.final.wnn, graph.name = 'wsnn', resolution = 0.01)  ##                 #select 0.001- 0.015
+DimPlot(F2.final.wnn, reduction = "wnn.umap", split.by = "Treatment")
+DimPlot(F2.final.wnn, reduction = "wnn.umap")
+```
+
+
+```{r}
+DefaultAssay(F2.final.wnn) <- "RNA"
+VlnPlot(F2.final.wnn, c("Pou5f1",'Ddx4',"Stra8","Dazl","Kit","Sall4","Zbtb16","Lin28","Id4"))
+#germ cells
+```
+
+
+
+```{r}
+# Sertoli cell markers
+DefaultAssay(F2.final.wnn) <- "RNA"
+VlnPlot(F2.final.wnn, c("Sox9","Rhox8",'Aard',"Amhr2","Clu","Ctsl"))   
+
+```
+
+
+
+```{r}
+VlnPlot(F2.final.wnn, c("Vwf","Tie1","Tek","Cyp17a1","Cyp11a1","Pecam1")) 
+
+```
+```{r}
+VlnPlot(F2.final.wnn,features = c("Apoe","Dab2","Adgre1"))
+#macrophages
+```
+
+```{r}
+FeaturePlot(F2.final.wnn, c("Inhba","Pdgfra","Lhcgr","Arx","Tcf21","Igf1"), reduction = "wnn.umap")
+```
+```{r}
+FeaturePlot(F2.final.wnn, c("Acta2","Il7r","Rgs5","Pdgfrb"), reduction = "wnn.umap") 
+```
+```{r}
+VlnPlot(F2.final.wnn, c("Il7r","Cd3g","Cnmd")) 
+#cluster4 lymphocytes
+```
+```{r}
+FeaturePlot(F2.final.wnn, c("Ddx4","Id4","Stra8","Dazl","Kit"), reduction = "wnn.umap")
+```
+
+
+
+
+
+```{r}
+F2.allclustermarkers <- FindAllMarkers(F2.final.wnn, test.use = "wilcox", only.pos = TRUE)
+write.csv(F2.allclustermarkers, "F2.allclustermarkers.csv")
+```
+
+
+
+```{r}
+F2.final.wnn <- FindClusters(F2.final.wnn, graph.name = 'wsnn', resolution = 0.05)  ##               
+DimPlot(F2.final.wnn, reduction = "wnn.umap", split.by = "Treatment")
+DimPlot(F2.final.wnn, reduction = "wnn.umap", label = T)
+```
+
+```{r}
+levels(F2.final.wnn)
+Idents(F2.final.wnn) <- "seurat_clusters"
+
+new.cluster.ids <- c("Germ","Stroma","Sertoli","Pericyte", "Stroma","Myoid","Innate Lymphoid","Germ","Macrophage","Leydig","Stroma","Endothelial")
+names(new.cluster.ids) <- levels(F2.final.wnn)
+F2.final.wnn <- RenameIdents(F2.final.wnn, new.cluster.ids)
+
+levels(F2.final.wnn)
+
+#add to metadata
+F2.final.wnn[["renamed.cluster.id"]] <- Idents(object = F2.final.wnn)
+```
+
+
+```{r}
+DimPlot(F2.final.wnn, reduction = "wnn.umap", group.by = "renamed.cluster.id", label = TRUE, label.size = 5, repel = TRUE) + FontSize(x.title = 12, y.title = 12)+theme(axis.text = element_text(size = 8))+theme(strip.text = element_text(size=8, face="bold"))+NoLegend()+Blank_Theme()
+
+ggsave("F2.UMAP.harmony.WNN.cluster.tiff", dpi=300,width = 5, height = 4)
+
+DimPlot(F2.final.wnn, reduction = "wnn.umap", split.by = "Treatment", label = FALSE, label.size = 4, repel = TRUE) +FontSize(x.title = 8, y.title = 8)+theme(axis.text = element_text(size = 8))+theme(strip.text = element_text(size=8, face="bold"))+ggtitle("WNN")+NoLegend()
+
+ggsave("F2.UMAP.harmony.WNN.Treatment.tiff",  dpi=300, width = 5, height = 2.5)
+```
+
+
+```{r}
+saveRDS(F2.final.wnn, "F2.final.wnn.rds")
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+df <- read.csv("F2.marker genes.csv")
+df <- df[,4]
+```
+
+
+```{r}
+DotPlot_scCustom(F2.final.wnn, features = df, x_lab_rotate = TRUE, flip_axes = FALSE) + xlab('Cluster') +  ylab('Gene') + scale_color_gradientn(colours = viridis::viridis(20), limits = c(0,2), oob = scales::squish, name = 'log2 (count + 1)')+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=12))+theme(legend.title = element_text(size=0.5)+theme(legend.text = element_text(size = 0.5)))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.key.size = unit(0.5,"cm"))
+ggsave("F2 cluster makers.tiff", width = 15, height = 6, dpi = 300, bg = "white")
+```
+
+```{r}
+DotPlot_scCustom(F2.final.wnn, features = df_clustermarkers, x_lab_rotate = TRUE, flip_axes = FALSE, dot.scale = 5) + xlab('Cluster') +  ylab('Gene')+theme(axis.title.x = element_blank(), axis.title.y = element_blank())+theme(axis.text = element_text(color='black', size=10))+theme(legend.key.size = unit(0.3, 'cm'))+theme(legend.title = element_text(size = 5))+theme(axis.line.x = element_line(size=0.55))+theme(axis.line.y = element_line(size=0.55))+theme(axis.ticks.x = element_line(size=0.55))+theme(axis.ticks.y = element_line(size = 0.55))+theme(legend.text = element_text(size = 5))
+ggsave("F2 cluster makers2.tiff", width = 8, height = 3, dpi = 300, bg = "white")
+```
+
